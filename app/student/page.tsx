@@ -169,56 +169,60 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-white">DFRFMS</h1>
-          <p className="text-xs text-gray-400">
-            Student — {userProfile?.name || user?.email} &nbsp;·&nbsp;
-            {userProfile?.dormitory || "General"} / Room {userProfile?.roomNumber || "N/A"}
-          </p>
+      <header className="bg-gradient-to-r from-gray-900 to-gray-900/80 border-b border-gray-800/50 backdrop-blur px-6 py-5 sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-white">DFRFMS</h1>
+            <p className="text-xs text-gray-400 mt-1">
+              Student · {userProfile?.name || user?.email} • {userProfile?.dormitory || "General"} / Room {userProfile?.roomNumber || "N/A"}
+            </p>
+          </div>
+          <button
+            onClick={() => signOut(auth).then(() => router.push("/login"))}
+            className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition"
+          >
+            Sign Out
+          </button>
         </div>
-        <button
-          onClick={() => signOut(auth).then(() => router.push("/login"))}
-          className="text-sm text-gray-400 hover:text-white transition"
-        >
-          Sign Out
-        </button>
       </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="max-w-5xl mx-auto px-6 py-8">
         {fetchError && (
-          <div className="mb-6 bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-4 rounded-lg">
+          <div className="mb-6 bg-red-500/10 border border-red-500/20 text-red-300 text-xs p-4 rounded-lg">
             {fetchError}
           </div>
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           {[
-            { label: "My Reports", value: stats.total, color: "text-white" },
-            { label: "Open", value: stats.open, color: "text-red-400" },
-            { label: "In Progress", value: stats.inProgress, color: "text-yellow-400" },
-            { label: "Resolved", value: stats.resolved, color: "text-green-400" },
+            { label: "My Reports", value: stats.total, color: "from-blue-600 to-cyan-600", icon: "📋" },
+            { label: "Open", value: stats.open, color: "from-red-600 to-orange-600", icon: "🔴" },
+            { label: "In Progress", value: stats.inProgress, color: "from-yellow-600 to-amber-600", icon: "⏳" },
+            { label: "Resolved", value: stats.resolved, color: "from-green-600 to-emerald-600", icon: "✓" },
           ].map((s) => (
-            <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <p className="text-gray-400 text-sm">{s.label}</p>
-              <p className={`text-3xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+            <div key={s.label} className={`bg-gradient-to-br ${s.color} rounded-lg p-4 shadow-lg hover:shadow-xl transition`}>
+              <p className="text-white/80 text-xs font-medium mb-2">{s.label}</p>
+              <div className="flex items-end justify-between">
+                <p className="text-3xl font-bold text-white">{s.value}</p>
+                <span className="text-2xl">{s.icon}</span>
+              </div>
             </div>
           ))}
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 border-b border-gray-800">
           {(["submit", "history"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition capitalize ${
+              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${
                 activeTab === tab
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-800 text-gray-400 hover:text-white"
+                  ? "border-blue-500 text-blue-400"
+                  : "border-transparent text-gray-400 hover:text-gray-300"
               }`}
             >
               {tab === "submit" ? "Submit Report" : "My Reports"}
@@ -232,22 +236,22 @@ export default function StudentDashboard() {
             <h2 className="text-lg font-semibold mb-6">New Fault Report</h2>
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-400 block mb-1">Title *</label>
+                <label className="text-sm text-gray-300 font-medium block mb-2">Title *</label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Broken light switch in bathroom"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-gray-400 block mb-1">Category</label>
+                  <label className="text-sm text-gray-300 font-medium block mb-2">Category</label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none"
+                    className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition"
                   >
                     <option value="electrical">Electrical</option>
                     <option value="plumbing">Plumbing</option>
@@ -259,11 +263,11 @@ export default function StudentDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm text-gray-400 block mb-1">Urgency</label>
+                  <label className="text-sm text-gray-300 font-medium block mb-2">Urgency</label>
                   <select
                     value={urgency}
                     onChange={(e) => setUrgency(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none"
+                    className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition"
                   >
                     <option value="normal">Normal</option>
                     <option value="urgent">Urgent</option>
@@ -273,36 +277,36 @@ export default function StudentDashboard() {
               </div>
 
               <div>
-                <label className="text-sm text-gray-400 block mb-1">Description *</label>
+                <label className="text-sm text-gray-300 font-medium block mb-2">Description *</label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={4}
                   placeholder="Describe the issue in detail..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 resize-none"
+                  className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 resize-none transition"
                 />
               </div>
 
               <div>
-                <label className="text-sm text-gray-400 block mb-1">Photo (optional)</label>
+                <label className="text-sm text-gray-300 font-medium block mb-2">Photo (optional)</label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={(e) => setPhoto(e.target.files?.[0] || null)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-gray-300 text-sm focus:outline-none file:mr-3 file:bg-blue-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1 file:text-xs"
+                  className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-gray-300 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 file:mr-3 file:bg-blue-600 file:text-white file:border-0 file:rounded file:px-4 file:py-2 file:text-xs file:font-medium hover:file:bg-blue-700 transition cursor-pointer"
                 />
               </div>
 
               {/* Priority preview */}
-              <div className="bg-gray-800/50 border border-gray-700 rounded-lg px-4 py-3 flex items-center justify-between">
-                <span className="text-sm text-gray-400">Calculated Priority</span>
-                <span className={`text-xs px-3 py-1 rounded-full capitalize font-medium ${PRIORITY_COLORS[calcPriority(category, urgency)]}`}>
+              <div className="bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/20 rounded-lg px-4 py-3 flex items-center justify-between">
+                <span className="text-sm text-gray-300 font-medium">Calculated Priority</span>
+                <span className={`text-xs px-3 py-1 rounded-full capitalize font-semibold ${PRIORITY_COLORS[calcPriority(category, urgency)]}`}>
                   {calcPriority(category, urgency)}
                 </span>
               </div>
 
               {successMsg && (
-                <p className={`text-sm ${successMsg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
+                <p className={`text-sm font-medium ${successMsg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
                   {successMsg}
                 </p>
               )}
@@ -310,9 +314,16 @@ export default function StudentDashboard() {
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition text-sm"
+                className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition duration-200 shadow-lg hover:shadow-xl"
               >
-                {submitting ? "Submitting..." : "Submit Report"}
+                {submitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    Submitting...
+                  </span>
+                ) : (
+                  "Submit Report"
+                )}
               </button>
             </div>
           </div>
@@ -321,11 +332,11 @@ export default function StudentDashboard() {
         {/* History Tab */}
         {activeTab === "history" && (
           <div>
-            <div className="mb-4">
+            <div className="mb-4 flex gap-2">
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                className="bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition"
               >
                 <option value="all">All Statuses</option>
                 <option value="open">Open</option>
@@ -336,11 +347,11 @@ export default function StudentDashboard() {
             </div>
 
             {filtered.length === 0 ? (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-                <p className="text-gray-500">No reports yet.</p>
+              <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-12 text-center">
+                <p className="text-gray-400">No reports yet.</p>
                 <button
                   onClick={() => setActiveTab("submit")}
-                  className="mt-4 text-blue-400 text-sm hover:underline"
+                  className="mt-4 text-blue-400 hover:text-blue-300 text-sm font-medium transition"
                 >
                   Submit your first report →
                 </button>
@@ -348,22 +359,22 @@ export default function StudentDashboard() {
             ) : (
               <div className="space-y-3">
                 {filtered.map((r) => (
-                  <div key={r.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                  <div key={r.id} className="bg-gray-900/50 border border-gray-800 hover:border-gray-700 rounded-xl p-5 transition group">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
-                        <h3 className="font-medium text-white">{r.title}</h3>
+                        <h3 className="font-semibold text-white group-hover:text-blue-300 transition">{r.title}</h3>
                         <p className="text-gray-400 text-sm mt-1">{r.description}</p>
                         <div className="flex flex-wrap gap-2 mt-3">
-                          <span className="text-xs text-gray-500 capitalize bg-gray-800 px-2 py-1 rounded">
+                          <span className="text-xs text-gray-400 bg-gray-800 px-2.5 py-1 rounded-md font-medium">
                             {r.category}
                           </span>
-                          <span className={`text-xs px-2 py-1 rounded-full capitalize ${PRIORITY_COLORS[r.priority] || ""}`}>
+                          <span className={`text-xs px-2.5 py-1 rounded-md font-semibold ${PRIORITY_COLORS[r.priority] || ""}`}>
                             {r.priority}
                           </span>
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className={`text-xs px-2 py-1 rounded-full capitalize ${STATUS_COLORS[r.status] || ""}`}>
+                        <span className={`text-xs px-2.5 py-1 rounded-md font-semibold block ${STATUS_COLORS[r.status] || ""}`}>
                           {r.status}
                         </span>
                         <p className="text-gray-500 text-xs mt-2">

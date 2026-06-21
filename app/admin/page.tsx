@@ -145,50 +145,55 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-white">DFRFMS</h1>
-          <p className="text-xs text-gray-400">Admin Dashboard</p>
+      <header className="bg-gradient-to-r from-gray-900 to-gray-900/80 border-b border-gray-800/50 backdrop-blur px-6 py-5 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-white">DFRFMS</h1>
+            <p className="text-xs text-gray-400 mt-1">Administrator Dashboard</p>
+          </div>
+          <button
+            onClick={() => signOut(auth).then(() => router.push("/login"))}
+            className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition"
+          >
+            Sign Out
+          </button>
         </div>
-        <button
-          onClick={() => signOut(auth).then(() => router.push("/login"))}
-          className="text-sm text-gray-400 hover:text-white transition"
-        >
-          Sign Out
-        </button>
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           {[
-            { label: "Total Reports", value: stats.total, color: "text-white" },
-            { label: "Open", value: stats.open, color: "text-red-400" },
-            { label: "In Progress", value: stats.inProgress, color: "text-yellow-400" },
-            { label: "Resolved", value: stats.resolved, color: "text-green-400" },
+            { label: "Total Reports", value: stats.total, color: "from-blue-600 to-cyan-600", icon: "📊" },
+            { label: "Open", value: stats.open, color: "from-red-600 to-orange-600", icon: "🔴" },
+            { label: "In Progress", value: stats.inProgress, color: "from-yellow-600 to-amber-600", icon: "⏳" },
+            { label: "Resolved", value: stats.resolved, color: "from-green-600 to-emerald-600", icon: "✓" },
           ].map((s) => (
-            <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <p className="text-gray-400 text-sm">{s.label}</p>
-              <p className={`text-3xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+            <div key={s.label} className={`bg-gradient-to-br ${s.color} rounded-lg p-4 shadow-lg hover:shadow-xl transition`}>
+              <p className="text-white/80 text-xs font-medium mb-2">{s.label}</p>
+              <div className="flex items-end justify-between">
+                <p className="text-3xl font-bold text-white">{s.value}</p>
+                <span className="text-2xl">{s.icon}</span>
+              </div>
             </div>
           ))}
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 border-b border-gray-800">
           {(["reports", "users", "create-user"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition capitalize ${
+              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 capitalize ${
                 activeTab === tab
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-800 text-gray-400 hover:text-white"
+                  ? "border-blue-500 text-blue-400"
+                  : "border-transparent text-gray-400 hover:text-gray-300"
               }`}
             >
-              {tab === "create-user" ? "Create User" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === "create-user" ? "Create User" : tab}
             </button>
           ))}
         </div>
