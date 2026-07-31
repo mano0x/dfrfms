@@ -6,7 +6,7 @@ The app is built with Next.js App Router, React, TypeScript, Tailwind CSS, and F
 
 ## What This App Does
 
-DFRFMS lets students submit fault reports, technicians work through assigned and unassigned issues, and admins manage the overall workflow. The core idea is simple: a problem is reported once, then tracked through its full life cycle until it is resolved or closed.
+DFRFMS lets students submit fault reports, technicians work through assigned and unassigned issues, and admins manage the overall workflow. The core idea is simple: a problem is reported once, then tracked until it is resolved.
 
 ## Main Roles
 
@@ -250,7 +250,7 @@ public/               Static assets
 
 ## UI Notes
 
-The interface uses a dark theme with Tailwind utility classes. The layout is intentionally compact and dashboard-oriented rather than marketing-style. Fonts are loaded through `next/font` using Geist, and the overall app shell is wrapped by the auth provider so role-aware data is available across routes.
+The interface uses a dark theme with Tailwind utility classes. The layout is intentionally compact and dashboard-oriented rather than marketing-style. Fonts are loaded through `next/font` using Geist.
 
 ## Current Limitations
 
@@ -292,4 +292,4 @@ When adding new features, keep the role-based structure consistent:
 
 ## Summary
 
-DFRFMS is a Firebase-backed dormitory maintenance system with three main experiences: students report issues, technicians resolve them, and admins coordinate the overall workflow. The current codebase is a focused role-based dashboard app, and this README documents the current implementation rather than a generic template.
+DFRFMS is a Firebase-backed dormitory maintenance system with three main experiences: students report issues, technicians resolve them, and admins coordinate the overall workflow. The current codebase focuses on a simple and direct client-side architecture backed by Firebase services.
