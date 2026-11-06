@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import {
-  collection, addDoc, getDocs, query, where, serverTimestamp,
+  collection, addDoc, getDocs, query, where, serverTimestamp, updateDoc, doc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { auth, db, storage } from "@/lib/firebase";
@@ -14,11 +14,15 @@ type Report = {
   title: string;
   category: string;
   priority: string;
+  urgency?: string;
   status: string;
+  studentId: string;
   description: string;
   dormitory: string;
   roomNumber: string;
   createdAt: any;
+  assignedTo?: string | null;
+  resolutionNote?: string;
   photoURL?: string;
 };
 
@@ -60,6 +64,15 @@ export default function StudentDashboard() {
   const [description, setDescription] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState("electrical");
+  const [editUrgency, setEditUrgency] = useState("normal");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPhoto, setEditPhoto] = useState<File | null>(null);
 
   useEffect(() => {
     if (!loading && (!user || role !== "student")) router.push("/login");
@@ -145,6 +158,74 @@ export default function StudentDashboard() {
       setSuccessMsg("❌ Submission failed. Please try again.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const canEditReport = (report: Report) =>
+    report.status === "open" && !report.assignedTo && report.studentId === user?.uid;
+
+  const openReport = (report: Report) => {
+    setSelectedReport(report);
+    setEditing(false);
+    setEditError("");
+    setEditTitle(report.title);
+    setEditCategory(report.category);
+    setEditUrgency(report.urgency || "normal");
+    setEditDescription(report.description);
+    setEditPhoto(null);
+  };
+
+  const handleEditSave = async () => {
+    if (!selectedReport || !user || !canEditReport(selectedReport)) {
+      setEditError("This report can no longer be edited.");
+      return;
+    }
+    if (!editTitle.trim() || !editDescription.trim()) {
+      setEditError("Title and description are required.");
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError("");
+    try {
+      let photoURL = selectedReport.photoURL || "";
+      if (editPhoto) {
+        const storageRef = ref(storage, `fault-photos/${user.uid}/${Date.now()}_${editPhoto.name}`);
+        await uploadBytes(storageRef, editPhoto);
+        photoURL = await getDownloadURL(storageRef);
+      }
+
+      const changes = {
+        title: editTitle.trim(),
+        category: editCategory,
+        urgency: editUrgency,
+        priority: calcPriority(editCategory, editUrgency),
+        description: editDescription.trim(),
+        photoURL,
+        updatedAt: serverTimestamp(),
+      };
+      await updateDoc(doc(db, "fault_reports", selectedReport.id), changes);
+
+      const updatedReport: Report = {
+        ...selectedReport,
+        title: changes.title,
+        category: changes.category,
+        urgency: changes.urgency,
+        priority: changes.priority,
+        description: changes.description,
+        photoURL: changes.photoURL,
+      };
+      setReports((current) =>
+        current.map((report) => report.id === selectedReport.id ? updatedReport : report)
+      );
+      setSelectedReport(updatedReport);
+      setEditing(false);
+      setEditPhoto(null);
+    } catch (error) {
+      console.error("Report update failed:", error);
+      setEditError("Could not save your changes. Please try again.");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -359,7 +440,13 @@ export default function StudentDashboard() {
             ) : (
               <div className="space-y-3">
                 {filtered.map((r) => (
-                  <div key={r.id} className="bg-gray-900/50 border border-gray-800 hover:border-gray-700 rounded-xl p-5 transition group">
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => openReport(r)}
+                    className="w-full text-left bg-gray-900/50 border border-gray-800 hover:border-blue-500/50 rounded-xl p-5 transition group focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    aria-label={`View details for ${r.title}`}
+                  >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <h3 className="font-semibold text-white group-hover:text-blue-300 transition">{r.title}</h3>
@@ -389,13 +476,203 @@ export default function StudentDashboard() {
                         className="mt-4 rounded-lg max-h-48 object-cover border border-gray-700"
                       />
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
           </div>
         )}
       </div>
+
+      {selectedReport && (
+        <div
+          className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="presentation"
+          onClick={() => setSelectedReport(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="report-details-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Report details</p>
+                <h2 id="report-details-title" className="mt-1 text-xl font-bold text-white">
+                  {selectedReport.title}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedReport(null)}
+                className="rounded-lg px-2 py-1 text-xl text-gray-400 hover:bg-gray-800 hover:text-white"
+                aria-label="Close report details"
+              >
+                ×
+              </button>
+            </div>
+
+            {canEditReport(selectedReport) && !editing && (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                Edit report
+              </button>
+            )}
+
+            {editing ? (
+              <div className="mt-6 space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Title *</label>
+                  <input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">Category</label>
+                    <select
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="electrical">Electrical</option>
+                      <option value="plumbing">Plumbing</option>
+                      <option value="hvac">HVAC / Heating</option>
+                      <option value="structural">Structural</option>
+                      <option value="internet">Internet / Network</option>
+                      <option value="furniture">Furniture</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">Urgency</label>
+                    <select
+                      value={editUrgency}
+                      onChange={(e) => setEditUrgency(e.target.value)}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="urgent">Urgent</option>
+                      <option value="emergency">Emergency</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Description *</label>
+                  <textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    rows={5}
+                    className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Replace photograph</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setEditPhoto(e.target.files?.[0] || null)}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-gray-300"
+                  />
+                </div>
+                {editError && <p className="text-sm text-red-400">{editError}</p>}
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setEditing(false); setEditError(""); }}
+                    className="rounded-lg px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800"
+                    disabled={savingEdit}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEditSave}
+                    disabled={savingEdit}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {savingEdit ? "Saving..." : "Save changes"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs text-gray-500">Report ID</p>
+                <p className="mt-1 break-all text-sm text-gray-200">{selectedReport.id}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Submitted</p>
+                <p className="mt-1 text-sm text-gray-200">
+                  {selectedReport.createdAt?.toDate?.()?.toLocaleString() || "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Category</p>
+                <p className="mt-1 capitalize text-sm text-gray-200">{selectedReport.category}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Priority</p>
+                <span className={`mt-1 inline-block rounded-md px-2.5 py-1 text-xs font-semibold ${PRIORITY_COLORS[selectedReport.priority] || ""}`}>
+                  {selectedReport.priority}
+                </span>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Status</p>
+                <span className={`mt-1 inline-block rounded-md px-2.5 py-1 text-xs font-semibold ${STATUS_COLORS[selectedReport.status] || ""}`}>
+                  {selectedReport.status}
+                </span>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Assigned technician</p>
+                <p className="mt-1 text-sm text-gray-200">{selectedReport.assignedTo || "Not assigned"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Location</p>
+                <p className="mt-1 text-sm text-gray-200">
+                  {selectedReport.dormitory || "—"} / Room {selectedReport.roomNumber || "—"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-xs text-gray-500">Description</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-200">{selectedReport.description}</p>
+            </div>
+
+            <div className="mt-6 rounded-lg border border-gray-800 bg-gray-950/50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Maintenance progress</p>
+              <p className="mt-2 text-sm text-gray-200">
+                Current status: <span className="capitalize">{selectedReport.status}</span>
+              </p>
+              <p className="mt-2 text-sm text-gray-400">
+                {selectedReport.resolutionNote || "No technician notes have been added yet."}
+              </p>
+            </div>
+
+            {selectedReport.photoURL && (
+              <div className="mt-6">
+                <p className="text-xs text-gray-500">Photograph</p>
+                <img
+                  src={selectedReport.photoURL}
+                  alt={`Photograph for ${selectedReport.title}`}
+                  className="mt-2 max-h-80 w-full rounded-lg border border-gray-700 object-contain"
+                />
+              </div>
+            )}
+              </>
+                                                                                                                                                        )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

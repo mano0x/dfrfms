@@ -1,0 +1,83 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      ).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'admin';
+    }
+
+    function isTechnician() {
+      return isSignedIn() && userRole() == 'technician';
+    }
+
+    function isStudent() {
+      return isSignedIn() && userRole() == 'student';
+    }
+
+    function validPriority() {
+      return request.resource.data.priority ==
+        (request.resource.data.urgency == 'emergency'
+          ? 'critical'
+          : request.resource.data.urgency == 'urgent'
+            ? (request.resource.data.category == 'electrical' ||
+               request.resource.data.category == 'plumbing'
+                ? 'high'
+                : 'medium')
+            : 'low');
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+
+      allow write: if isAdmin();
+    }
+
+    match /fault_reports/{reportId} {
+      allow read: if isSignedIn();
+
+      allow create: if isStudent()
+        && request.resource.data.studentId == request.auth.uid;
+
+      allow update: if isAdmin()
+        || isTechnician()
+        || (
+          isStudent()
+          && resource.data.studentId == request.auth.uid
+          && resource.data.status == 'open'
+          && resource.data.assignedTo == null
+          && request.resource.data.studentId == resource.data.studentId
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.assignedTo == resource.data.assignedTo
+          && request.resource.data.diff(resource.data)
+              .affectedKeys()
+              .hasOnly([
+                'title',
+                'category',
+                'urgency',
+                'description',
+                'photoURL',
+                'priority',
+                'updatedAt'
+              ])
+          && validPriority()
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    match /status_log/{logId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
