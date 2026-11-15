@@ -8,6 +8,9 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { auth, db, storage } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
+import { firstError, priorityForClassification, reportInputSchema, validatePhoto } from "@/lib/maintenance";
+import { logReportCreated, logReportEdited, type Actor } from "@/lib/reports";
+import { TargetBadge, Timeline } from "@/components/Timeline";
 import {
   Alert, AppShell, CATEGORIES, Card, Detail, EmptyState, Field, FilePicker, Icon,
   LoadingScreen, PageHeader, PriorityBadge, STATUSES, STATUS_BAR, Spinner, StatGrid,
@@ -27,17 +30,13 @@ type Report = {
   roomNumber: string;
   createdAt: any;
   assignedTo?: string | null;
+  priorityOverridden?: boolean;
   resolutionNote?: string;
   photoURL?: string;
 };
 
-// Priority follows the maintenance classification only:
-// Routine -> low, Priority -> high, Emergency -> critical.
-function calcPriority(urgency: string): string {
-  if (urgency === "emergency") return "critical";
-  if (urgency === "urgent") return "high";
-  return "low";
-}
+// Priority rule shared with the rest of the system (see lib/maintenance.ts).
+const calcPriority = priorityForClassification;
 
 const PRIORITY_EXPLAINER: Record<string, string> = {
   critical: "Emergency maintenance is handled immediately.",
@@ -154,7 +153,11 @@ export default function StudentDashboard() {
   };
 
   const handleSubmit = async () => {
-    if (!title || !description) { setSuccessMsg("❌ Title and description are required."); return; }
+    const parsed = reportInputSchema.safeParse({ title, category, urgency, description });
+    if (!parsed.success) { setSuccessMsg(`❌ ${firstError(parsed)}`); return; }
+    const photoError = validatePhoto(photo);
+    if (photoError) { setSuccessMsg(`❌ ${photoError}`); return; }
+    const input = parsed.data;
     setSubmitting(true);
     setSuccessMsg("");
     try {
@@ -165,14 +168,14 @@ export default function StudentDashboard() {
         photoURL = await getDownloadURL(storageRef);
       }
 
-      const priority = calcPriority(urgency);
+      const priority = calcPriority(input.urgency);
 
-      await addDoc(collection(db, "fault_reports"), {
-        title,
-        category,
-        urgency,
+      const created = await addDoc(collection(db, "fault_reports"), {
+        title: input.title,
+        category: input.category,
+        urgency: input.urgency,
         priority,
-        description,
+        description: input.description,
         photoURL,
         status: "open",
         studentId: user!.uid,
@@ -180,9 +183,12 @@ export default function StudentDashboard() {
         dormitory: userProfile?.dormitory || "Unknown",
         roomNumber: userProfile?.roomNumber || "Unknown",
         assignedTo: null,
+        assignedToId: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      // The report is saved; a failed history entry must not look like a failed submission.
+      await logReportCreated(created.id, actor()).catch((err) => console.error("History entry failed:", err));
 
       setSuccessMsg("✓ Report submitted successfully!");
       setTitle(""); setCategory("electrical"); setUrgency("normal");
@@ -196,8 +202,15 @@ export default function StudentDashboard() {
     }
   };
 
+  const actor = (): Actor => ({
+    uid: user!.uid,
+    name: userProfile?.name || user!.email || "Resident",
+    role: "student",
+  });
+
+  // Residents can edit only while the report is open, unassigned and not yet triaged.
   const canEditReport = (report: Report) =>
-    report.status === "open" && !report.assignedTo && report.studentId === user?.uid;
+    report.status === "open" && !report.assignedTo && !report.priorityOverridden && report.studentId === user?.uid;
 
   const openReport = (report: Report) => {
     setSelectedReport(report);
@@ -215,10 +228,13 @@ export default function StudentDashboard() {
       setEditError("This report can no longer be edited.");
       return;
     }
-    if (!editTitle.trim() || !editDescription.trim()) {
-      setEditError("Title and description are required.");
-      return;
-    }
+    const parsed = reportInputSchema.safeParse({
+      title: editTitle, category: editCategory, urgency: editUrgency, description: editDescription,
+    });
+    if (!parsed.success) { setEditError(firstError(parsed)); return; }
+    const photoError = validatePhoto(editPhoto);
+    if (photoError) { setEditError(photoError); return; }
+    const input = parsed.data;
 
     setSavingEdit(true);
     setEditError("");
@@ -231,15 +247,16 @@ export default function StudentDashboard() {
       }
 
       const changes = {
-        title: editTitle.trim(),
-        category: editCategory,
-        urgency: editUrgency,
-        priority: calcPriority(editUrgency),
-        description: editDescription.trim(),
+        title: input.title,
+        category: input.category,
+        urgency: input.urgency,
+        priority: calcPriority(input.urgency),
+        description: input.description,
         photoURL,
         updatedAt: serverTimestamp(),
       };
       await updateDoc(doc(db, "fault_reports", selectedReport.id), changes);
+      await logReportEdited(selectedReport.id, actor()).catch((err) => console.error("History entry failed:", err));
 
       const updatedReport: Report = {
         ...selectedReport,
@@ -603,6 +620,7 @@ export default function StudentDashboard() {
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={selectedReport.status} />
                     <PriorityBadge priority={selectedReport.priority} />
+                    <TargetBadge createdAt={selectedReport.createdAt?.toDate?.() ?? null} priority={selectedReport.priority} status={selectedReport.status} />
                     <Tag>{categoryLabel(selectedReport.category)}</Tag>
                   </div>
 
@@ -639,6 +657,11 @@ export default function StudentDashboard() {
                     <p className="mt-1.5 text-sm text-muted">
                       {selectedReport.resolutionNote || "No technician notes have been added yet."}
                     </p>
+                  </div>
+
+                  <div className="mt-6">
+                    <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">History</p>
+                    <Timeline reportId={selectedReport.id} />
                   </div>
 
                   {selectedReport.photoURL && (

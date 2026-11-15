@@ -2,28 +2,39 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut, createUserWithEmailAndPassword } from "firebase/auth";
-import {
-  collection, getDocs, updateDoc, doc, query, orderBy, setDoc, serverTimestamp
-} from "firebase/firestore";
+import { collection, getDocs, doc, query, orderBy, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db, getAccountCreationAuth } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import {
-  Alert, AppShell, Card, Field, Icon, LoadingScreen, PRIORITIES, PageHeader, PriorityBadge,
-  STATUSES, Spinner, StatGrid, StatusBadge, Tabs, btn, cx, inputCls, selectCls,
+  allowedNextStatuses, firstError, isOverdue, newUserSchema, priorityForClassification,
+  type Priority, type Status,
+} from "@/lib/maintenance";
+import { assignTechnician, changeStatus, overridePriority, type Actor } from "@/lib/reports";
+import { TargetBadge, Timeline } from "@/components/Timeline";
+import {
+  Alert, AppShell, Card, Detail, Field, Icon, LoadingScreen, PRIORITIES, PageHeader, PriorityBadge,
+  STATUSES, Spinner, StatGrid, StatusBadge, Tabs, Tag, URGENCIES, btn, categoryLabel, cx, inputCls,
+  selectCls, statusLabel,
 } from "@/components/ui";
 
 type Report = {
   id: string;
   title: string;
   category: string;
+  urgency?: string;
   priority: string;
+  priorityOverridden?: boolean;
+  priorityReason?: string;
   status: string;
   dormitory: string;
   roomNumber: string;
   studentName: string;
   description: string;
   createdAt: any;
-  assignedTo?: string;
+  assignedTo?: string | null;
+  assignedToId?: string | null;
+  resolutionNote?: string;
+  photoURL?: string;
 };
 
 type UserRecord = {
@@ -43,7 +54,7 @@ const ROLE_TONE: Record<string, string> = {
 };
 
 const tableSelect =
-  "ui-select rounded-md border border-line bg-surface py-1.5 pl-2.5 text-xs font-medium text-ink transition hover:border-line-strong focus:border-brand focus:outline-none focus:ring-4 focus:ring-ring";
+  "ui-select rounded-md border border-line bg-surface py-1.5 pl-2.5 text-xs font-medium text-ink transition hover:border-line-strong focus:border-brand focus:outline-none focus:ring-4 focus:ring-ring disabled:opacity-60";
 
 export default function AdminDashboard() {
   const { user, role, loading } = useAuth();
@@ -54,7 +65,16 @@ export default function AdminDashboard() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
+
+  // Report actions
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [triagePriority, setTriagePriority] = useState<Priority>("low");
+  const [triageReason, setTriageReason] = useState("");
 
   // Create user form
   const [newName, setNewName] = useState("");
@@ -72,8 +92,9 @@ export default function AdminDashboard() {
   }, [user, role, loading]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    // Load data only once an administrator is signed in.
+    if (user && role === "admin") fetchData();
+  }, [user, role]);
 
   const fetchData = async () => {
     setDataLoading(true);
@@ -86,27 +107,61 @@ export default function AdminDashboard() {
     setDataLoading(false);
   };
 
-  const updateStatus = async (id: string, status: string) => {
-    await updateDoc(doc(db, "fault_reports", id), { status, updatedAt: serverTimestamp() });
-    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+  const actor = (): Actor => ({
+    uid: user!.uid,
+    name: users.find((u) => u.id === user!.uid)?.name || user!.email || "Administrator",
+    role: "admin",
+  });
+
+  const patchReport = (id: string, changes: Partial<Report>) =>
+    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, ...changes } : r)));
+
+  // Run one change on a report; show a message if it fails.
+  const run = async (reportId: string, action: () => Promise<void>) => {
+    setBusyId(reportId);
+    setActionError("");
+    try {
+      await action();
+      setHistoryVersion((v) => v + 1);
+    } catch (err) {
+      console.error("Report update failed:", err);
+      setActionError(err instanceof Error && !("code" in err) ? err.message : "The change could not be saved. Please try again.");
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const assignTech = async (reportId: string, techName: string) => {
-    await updateDoc(doc(db, "fault_reports", reportId), {
-      assignedTo: techName,
-      status: "in-progress",
-      updatedAt: serverTimestamp(),
+  const updateStatus = (report: Report, status: Status) =>
+    run(report.id, async () => {
+      await changeStatus(report, status, actor());
+      patchReport(report.id, { status });
     });
-    setReports((prev) =>
-      prev.map((r) => (r.id === reportId ? { ...r, assignedTo: techName, status: "in-progress" } : r))
-    );
+
+  const assignTech = (report: Report, technicianId: string) =>
+    run(report.id, async () => {
+      const tech = technicians.find((t) => t.id === technicianId) ?? null;
+      const status = await assignTechnician(report, tech ? { id: tech.id, name: tech.name } : null, actor());
+      patchReport(report.id, { assignedTo: tech?.name ?? null, assignedToId: tech?.id ?? null, status });
+    });
+
+  const savePriority = (report: Report) =>
+    run(report.id, async () => {
+      await overridePriority(report, triagePriority, triageReason, actor());
+      patchReport(report.id, { priority: triagePriority, priorityOverridden: true, priorityReason: triageReason.trim() });
+      setTriageReason("");
+    });
+
+  const openDetails = (report: Report) => {
+    setSelectedId(report.id);
+    setTriagePriority((PRIORITIES.find((p) => p.value === report.priority)?.value ?? "low") as Priority);
+    setTriageReason("");
+    setActionError("");
   };
 
   const handleCreateUser = async () => {
-    const name = newName.trim();
-    const email = newEmail.trim().toLowerCase();
-    if (!name || !email) { setCreateMsg("Name and email are required."); return; }
-    if (newPassword.length < 6) { setCreateMsg("The starting password must be at least 6 characters."); return; }
+    const parsed = newUserSchema.safeParse({ name: newName, email: newEmail, password: newPassword, role: newRole });
+    if (!parsed.success) { setCreateMsg(firstError(parsed)); return; }
+    const { name, email, password, role: userRole } = parsed.data;
 
     setCreating(true);
     setCreateMsg("");
@@ -114,7 +169,7 @@ export default function AdminDashboard() {
     try {
       // 1. Create the sign-in account on a separate auth instance so the
       //    admin stays signed in.
-      const cred = await createUserWithEmailAndPassword(creationAuth, email, newPassword);
+      const cred = await createUserWithEmailAndPassword(creationAuth, email, password);
 
       // 2. Save the profile under the account's UID — this is the document
       //    the login page and AuthContext read to find the user's role.
@@ -122,10 +177,10 @@ export default function AdminDashboard() {
       await setDoc(doc(db, "users", cred.user.uid), {
         name,
         email,
-        role: newRole,
-        dormitory: newRole === "student" ? newDorm || null : null,
-        roomNumber: newRole === "student" ? newRoom || null : null,
-        specialization: newRole === "technician" ? newSpec || null : null,
+        role: userRole,
+        dormitory: userRole === "student" ? newDorm.trim() || null : null,
+        roomNumber: userRole === "student" ? newRoom.trim() || null : null,
+        specialization: userRole === "technician" ? newSpec.trim() || null : null,
         createdAt: serverTimestamp(),
       });
 
@@ -137,7 +192,7 @@ export default function AdminDashboard() {
       setCreateMsg(
         code === "auth/email-already-in-use" ? "An account with this email already exists." :
         code === "auth/invalid-email" ? "That email address is not valid." :
-        code === "auth/weak-password" ? "The starting password is too weak (at least 6 characters)." :
+        code === "auth/weak-password" ? "The starting password is too weak." :
         code === "auth/operation-not-allowed" ? "Email/password sign-in is not enabled in Firebase Authentication." :
         code === "permission-denied" ? "The account was created, but saving the profile was blocked by the security rules." :
         "Could not create the user. Please try again."
@@ -149,6 +204,12 @@ export default function AdminDashboard() {
   };
 
   const technicians = users.filter((u) => u.role === "technician");
+  const createdDate = (r: Report): Date | null => r.createdAt?.toDate?.() ?? null;
+  const overdue = (r: Report) => isOverdue(createdDate(r), r.priority, r.status);
+
+  // The select needs an ID; reports assigned before IDs were stored only have a name.
+  const assignedTechId = (r: Report) =>
+    r.assignedToId || technicians.find((t) => t.name === r.assignedTo)?.id || "";
 
   const filtered = reports.filter((r) => {
     const matchSearch =
@@ -157,27 +218,39 @@ export default function AdminDashboard() {
       r.roomNumber?.includes(search);
     const matchStatus = filterStatus === "all" || r.status === filterStatus;
     const matchPriority = filterPriority === "all" || r.priority === filterPriority;
-    return matchSearch && matchStatus && matchPriority;
+    return matchSearch && matchStatus && matchPriority && (!overdueOnly || overdue(r));
   });
 
   const stats = {
     total: reports.length,
     open: reports.filter((r) => r.status === "open").length,
     inProgress: reports.filter((r) => r.status === "in-progress").length,
-    resolved: reports.filter((r) => r.status === "resolved").length,
+    overdue: reports.filter(overdue).length,
   };
+
+  const selected = reports.find((r) => r.id === selectedId) ?? null;
+
+  // Close the details dialog with Escape
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setSelectedId(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId]);
 
   if (loading || dataLoading) {
     return <LoadingScreen label="Loading the admin console…" />;
   }
 
   const unassigned = reports.filter((r) => !r.assignedTo && r.status === "open").length;
-  const filtersActive = search || filterStatus !== "all" || filterPriority !== "all";
+  const filtersActive = search || filterStatus !== "all" || filterPriority !== "all" || overdueOnly;
+
+  const statusOptions = (r: Report) => [r.status, ...allowedNextStatuses("admin", r.status)];
 
   return (
     <AppShell
       role="admin"
-      name={user?.email || "Administrator"}
+      name={users.find((u) => u.id === user?.uid)?.name || user?.email || "Administrator"}
       detail="Administrator"
       onSignOut={() => signOut(auth).then(() => router.push("/"))}
     >
@@ -200,9 +273,9 @@ export default function AdminDashboard() {
       <StatGrid
         items={[
           { label: "Total reports", value: stats.total, tone: "solid", icon: <Icon.Chart width={16} height={16} /> },
-          { label: "Open", value: stats.open, tone: "plain", icon: <Icon.Alert width={16} height={16} /> },
+          { label: "Open", value: stats.open, tone: "plain", icon: <Icon.Inbox width={16} height={16} /> },
           { label: "In progress", value: stats.inProgress, tone: "plain", icon: <Icon.Clock width={16} height={16} /> },
-          { label: "Resolved", value: stats.resolved, tone: "plain", icon: <Icon.Check width={16} height={16} /> },
+          { label: "Overdue", value: stats.overdue, tone: "plain", icon: <Icon.Alert width={16} height={16} /> },
         ]}
       />
 
@@ -221,7 +294,7 @@ export default function AdminDashboard() {
       {/* Reports */}
       {activeTab === "reports" && (
         <div className="ui-fade-up">
-          <div className="mb-4 flex flex-wrap gap-3">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
             <div className="relative min-w-[220px] flex-1">
               <Icon.Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" width={16} height={16} />
               <input
@@ -240,27 +313,37 @@ export default function AdminDashboard() {
               <option value="all">All priorities</option>
               {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-ink-2">
+              <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} className="h-4 w-4 accent-black" />
+              Overdue only
+            </label>
             {filtersActive && (
               <button
                 className={btn.ghost}
-                onClick={() => { setSearch(""); setFilterStatus("all"); setFilterPriority("all"); }}
+                onClick={() => { setSearch(""); setFilterStatus("all"); setFilterPriority("all"); setOverdueOnly(false); }}
               >
                 <Icon.X width={16} height={16} /> Clear
               </button>
             )}
           </div>
 
+          {actionError && !selected && (
+            <div className="mb-4">
+              <Alert tone="error">{actionError}</Alert>
+            </div>
+          )}
+
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] text-sm">
+              <table className="w-full min-w-[900px] text-sm">
                 <thead>
                   <tr className="border-b border-line bg-surface-2/70 text-left text-xs font-semibold uppercase tracking-wide text-muted">
                     <th className="px-4 py-3">Report</th>
                     <th className="px-4 py-3">Location</th>
                     <th className="px-4 py-3">Priority</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Change status</th>
                     <th className="px-4 py-3">Technician</th>
+                    <th className="px-4 py-3"><span className="sr-only">Details</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -276,36 +359,47 @@ export default function AdminDashboard() {
                       <td className="max-w-[280px] px-4 py-3">
                         <p className="truncate font-medium text-ink">{r.title}</p>
                         <p className="truncate text-xs text-muted">
-                          {r.studentName} · {r.createdAt?.toDate?.()?.toLocaleDateString() || "—"}
+                          {r.studentName} · {createdDate(r)?.toLocaleDateString() || "—"}
                         </p>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-ink-2">
                         {r.dormitory} · {r.roomNumber}
                       </td>
-                      <td className="px-4 py-3"><PriorityBadge priority={r.priority} /></td>
-                      <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-start gap-1.5">
+                          <PriorityBadge priority={r.priority} />
+                          <TargetBadge createdAt={createdDate(r)} priority={r.priority} status={r.status} />
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <select
                           aria-label={`Status for ${r.title}`}
                           value={r.status}
-                          onChange={(e) => updateStatus(r.id, e.target.value)}
+                          disabled={busyId === r.id}
+                          onChange={(e) => updateStatus(r, e.target.value as Status)}
                           className={tableSelect}
                         >
-                          {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                          {statusOptions(r).map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
                         </select>
                       </td>
                       <td className="px-4 py-3">
                         <select
                           aria-label={`Technician for ${r.title}`}
-                          value={r.assignedTo || ""}
-                          onChange={(e) => assignTech(r.id, e.target.value)}
+                          value={assignedTechId(r)}
+                          disabled={busyId === r.id || r.status === "closed"}
+                          onChange={(e) => assignTech(r, e.target.value)}
                           className={cx(tableSelect, !r.assignedTo && "border-dashed text-muted")}
                         >
                           <option value="">Unassigned</option>
                           {technicians.map((t) => (
-                            <option key={t.id} value={t.name}>{t.name}</option>
+                            <option key={t.id} value={t.id}>{t.name}</option>
                           ))}
                         </select>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button className={btn.secondary} onClick={() => openDetails(r)}>
+                          View
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -395,12 +489,12 @@ export default function AdminDashboard() {
                 </div>
               </Field>
               <Field label="Full name" required htmlFor="new-name">
-                <input id="new-name" value={newName} onChange={(e) => setNewName(e.target.value)} className={inputCls} placeholder="Jonas Petraitis" />
+                <input id="new-name" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={80} className={inputCls} placeholder="Jonas Petraitis" />
               </Field>
               <Field label="Email" required htmlFor="new-email">
                 <input id="new-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className={inputCls} placeholder="user@example.com" />
               </Field>
-              <Field label="Starting password" required htmlFor="new-password" hint="At least 6 characters. Share it with the user privately.">
+              <Field label="Starting password" required htmlFor="new-password" hint="At least 8 characters. Share it with the user privately.">
                 <input
                   id="new-password"
                   type="password"
@@ -414,16 +508,16 @@ export default function AdminDashboard() {
               {newRole === "student" && (
                 <div className="grid gap-5 sm:grid-cols-2">
                   <Field label="Dormitory" htmlFor="new-dorm">
-                    <input id="new-dorm" value={newDorm} onChange={(e) => setNewDorm(e.target.value)} className={inputCls} placeholder="Dormitory A" />
+                    <input id="new-dorm" value={newDorm} onChange={(e) => setNewDorm(e.target.value)} maxLength={60} className={inputCls} placeholder="Dormitory A" />
                   </Field>
                   <Field label="Room number" htmlFor="new-room">
-                    <input id="new-room" value={newRoom} onChange={(e) => setNewRoom(e.target.value)} className={inputCls} placeholder="204" />
+                    <input id="new-room" value={newRoom} onChange={(e) => setNewRoom(e.target.value)} maxLength={20} className={inputCls} placeholder="204" />
                   </Field>
                 </div>
               )}
               {newRole === "technician" && (
                 <Field label="Specialization" htmlFor="new-spec">
-                  <input id="new-spec" value={newSpec} onChange={(e) => setNewSpec(e.target.value)} className={inputCls} placeholder="Electrical / Plumbing / HVAC" />
+                  <input id="new-spec" value={newSpec} onChange={(e) => setNewSpec(e.target.value)} maxLength={80} className={inputCls} placeholder="Electrical / Plumbing / HVAC" />
                 </Field>
               )}
               {createMsg && (
@@ -447,6 +541,125 @@ export default function AdminDashboard() {
               dashboard they see after signing in.
             </p>
           </Card>
+        </div>
+      )}
+
+      {/* Report details and triage */}
+      {selected && (
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
+          role="presentation"
+          onClick={() => setSelectedId(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-report-title"
+            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-2xl border border-line bg-surface shadow-pop sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-surface px-5 py-4 sm:px-6">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Report details</p>
+                <h2 id="admin-report-title" className="mt-1 truncate text-lg font-bold text-ink">{selected.title}</h2>
+              </div>
+              <button type="button" onClick={() => setSelectedId(null)} className={btn.ghost} aria-label="Close report details">
+                <Icon.X />
+              </button>
+            </div>
+
+            <div className="grid gap-8 px-5 py-5 sm:px-6 md:grid-cols-[1.2fr_1fr]">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge status={selected.status} />
+                  <PriorityBadge priority={selected.priority} />
+                  <TargetBadge createdAt={createdDate(selected)} priority={selected.priority} status={selected.status} />
+                  <Tag>{categoryLabel(selected.category)}</Tag>
+                </div>
+
+                <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <Detail label="Reported by">{selected.studentName || "—"}</Detail>
+                  <Detail label="Location">{selected.dormitory || "—"} · Room {selected.roomNumber || "—"}</Detail>
+                  <Detail label="Submitted">{createdDate(selected)?.toLocaleString() || "—"}</Detail>
+                  <Detail label="Classification">
+                    {URGENCIES.find((u) => u.value === selected.urgency)?.label ?? "—"}
+                  </Detail>
+                  <Detail label="Technician">{selected.assignedTo || "Not assigned"}</Detail>
+                  <Detail label="Report ID"><span className="break-all font-mono text-xs text-ink-2">{selected.id}</span></Detail>
+                </dl>
+
+                <div className="mt-5">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted">Description</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink">{selected.description}</p>
+                </div>
+
+                {selected.resolutionNote && (
+                  <div className="mt-5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Resolution note</p>
+                    <p className="mt-2 whitespace-pre-wrap rounded-lg border border-line-strong bg-surface-2 px-3.5 py-3 text-sm text-ink">{selected.resolutionNote}</p>
+                  </div>
+                )}
+
+                {selected.photoURL && (
+                  <div className="mt-5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Photo</p>
+                    <a href={selected.photoURL} target="_blank" rel="noreferrer" className="mt-2 block">
+                      <img src={selected.photoURL} alt={`Photo of ${selected.title}`} className="max-h-64 w-full rounded-lg border border-line bg-surface-2 object-contain" />
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-6">
+                {actionError && <Alert tone="error">{actionError}</Alert>}
+
+                <div className="rounded-xl border border-line p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Triage: priority</p>
+                  <p className="mt-2 text-sm text-ink-2">
+                    {selected.priorityOverridden
+                      ? <>Set by an administrator. Reason: <span className="text-ink">{selected.priorityReason || "—"}</span></>
+                      : <>Calculated from the resident&apos;s classification ({priorityForClassification(selected.urgency ?? "normal")}). Change it if the report was classified too high or too low.</>}
+                  </p>
+                  <form
+                    className="mt-3 space-y-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      savePriority(selected);
+                    }}
+                  >
+                    <select
+                      aria-label="New priority"
+                      value={triagePriority}
+                      onChange={(e) => setTriagePriority(e.target.value as Priority)}
+                      className={selectCls}
+                    >
+                      {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                    <input
+                      aria-label="Reason for the priority change"
+                      value={triageReason}
+                      onChange={(e) => setTriageReason(e.target.value)}
+                      maxLength={300}
+                      placeholder="Reason for the change"
+                      className={inputCls}
+                    />
+                    <button
+                      type="submit"
+                      disabled={busyId === selected.id || triagePriority === selected.priority || triageReason.trim().length < 5}
+                      className={cx(btn.primary, "w-full")}
+                    >
+                      {busyId === selected.id ? <Spinner /> : "Save priority"}
+                    </button>
+                  </form>
+                </div>
+
+                <div>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">History</p>
+                  <Timeline reportId={selected.id} refreshKey={historyVersion} />
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       )}
     </AppShell>

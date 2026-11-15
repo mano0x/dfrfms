@@ -2,15 +2,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
-import {
-  collection, getDocs, updateDoc, doc, query, where,
-  orderBy, addDoc, serverTimestamp,
-} from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
+import { allowedNextStatuses, isAssignedTo, isOverdue, type Status } from "@/lib/maintenance";
+import { changeStatus, saveResolutionNote, type Actor } from "@/lib/reports";
+import { TargetBadge, Timeline } from "@/components/Timeline";
 import {
-  AppShell, EmptyState, Icon, LoadingScreen, PageHeader, PriorityBadge, STATUSES, STATUS_BAR,
-  Spinner, StatGrid, StatusBadge, Tabs, Tag, btn, categoryLabel, cx, inputCls, selectCls,
+  Alert, AppShell, EmptyState, Icon, LoadingScreen, PageHeader, PriorityBadge, STATUSES, STATUS_BAR,
+  Spinner, StatGrid, StatusBadge, Tabs, Tag, btn, categoryLabel, cx, inputCls, selectCls, statusLabel,
 } from "@/components/ui";
 
 type Report = {
@@ -23,7 +23,8 @@ type Report = {
   dormitory: string;
   roomNumber: string;
   studentName: string;
-  assignedTo?: string;
+  assignedTo?: string | null;
+  assignedToId?: string | null;
   resolutionNote?: string;
   createdAt: any;
   updatedAt: any;
@@ -41,6 +42,8 @@ export default function TechnicianDashboard() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
 
   useEffect(() => {
     if (!loading && (!user || role !== "technician")) router.push("/");
@@ -62,7 +65,7 @@ export default function TechnicianDashboard() {
       setUserProfile(profile);
     }
 
-    // Get all reports (we filter client-side by assignedTo)
+    // Get all reports (we filter client-side by assignment)
     const rSnap = await getDocs(
       query(collection(db, "fault_reports"), orderBy("createdAt", "desc"))
     );
@@ -70,42 +73,45 @@ export default function TechnicianDashboard() {
     setDataLoading(false);
   };
 
-  const updateStatus = async (reportId: string, status: string) => {
+  const actor = (): Actor => ({
+    uid: user!.uid,
+    name: userProfile?.name || user!.email || "Technician",
+    role: "technician",
+  });
+
+  // Run one change on a report, showing a message on that report if it fails.
+  const run = async (reportId: string, action: () => Promise<void>) => {
     setSaving(reportId);
-    await updateDoc(doc(db, "fault_reports", reportId), {
-      status,
-      updatedAt: serverTimestamp(),
-    });
-    setReports((prev) =>
-      prev.map((r) => (r.id === reportId ? { ...r, status } : r))
-    );
-    setSaving(null);
+    setActionError(null);
+    try {
+      await action();
+      setHistoryVersion((v) => v + 1);
+    } catch (err) {
+      console.error("Report update failed:", err);
+      setActionError({
+        id: reportId,
+        message: err instanceof Error && !("code" in err) ? err.message : "The change could not be saved. Please try again.",
+      });
+    } finally {
+      setSaving(null);
+    }
   };
 
-  const saveNote = async (reportId: string) => {
-    const note = noteInputs[reportId];
-    if (!note?.trim()) return;
-    setSaving(reportId);
-    await updateDoc(doc(db, "fault_reports", reportId), {
-      resolutionNote: note,
-      updatedAt: serverTimestamp(),
+  const updateStatus = (report: Report, status: Status) =>
+    run(report.id, async () => {
+      await changeStatus(report, status, actor());
+      setReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, status } : r)));
     });
-    // Log to status_log
-    await addDoc(collection(db, "status_log"), {
-      reportId,
-      technicianName: userProfile?.name || user!.email,
-      note,
-      timestamp: serverTimestamp(),
-    });
-    setReports((prev) =>
-      prev.map((r) => (r.id === reportId ? { ...r, resolutionNote: note } : r))
-    );
-    setSaving(null);
-  };
 
-  const assignedReports = reports.filter(
-    (r) => r.assignedTo === userProfile?.name
-  );
+  const saveNote = (report: Report) =>
+    run(report.id, async () => {
+      const saved = await saveResolutionNote(report, noteInputs[report.id] || "", actor());
+      setReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, resolutionNote: saved } : r)));
+      setNoteInputs((prev) => ({ ...prev, [report.id]: "" }));
+    });
+
+  const me = { uid: user?.uid, name: userProfile?.name };
+  const assignedReports = reports.filter((r) => isAssignedTo(r, me));
 
   const displayReports =
     activeTab === "assigned" ? assignedReports : reports;
@@ -114,11 +120,13 @@ export default function TechnicianDashboard() {
     (r) => filterStatus === "all" || r.status === filterStatus
   );
 
+  const createdDate = (r: Report): Date | null => r.createdAt?.toDate?.() ?? null;
+
   const stats = {
     assigned: assignedReports.length,
     inProgress: assignedReports.filter((r) => r.status === "in-progress").length,
     resolved: assignedReports.filter((r) => r.status === "resolved").length,
-    open: assignedReports.filter((r) => r.status === "open").length,
+    overdue: assignedReports.filter((r) => isOverdue(createdDate(r), r.priority, r.status)).length,
   };
 
   if (loading || dataLoading) {
@@ -126,6 +134,7 @@ export default function TechnicianDashboard() {
   }
 
   const displayName = userProfile?.name || user?.email || "Technician";
+  const active = assignedReports.filter((r) => r.status === "open" || r.status === "in-progress").length;
 
   return (
     <AppShell
@@ -139,15 +148,15 @@ export default function TechnicianDashboard() {
         subtitle={
           stats.assigned === 0
             ? "No jobs are assigned to you right now."
-            : `${stats.assigned - stats.resolved} of your ${stats.assigned} assigned job${stats.assigned === 1 ? "" : "s"} still need attention.`
+            : `${active} of your ${stats.assigned} assigned job${stats.assigned === 1 ? "" : "s"} still need attention.`
         }
       />
 
       <StatGrid
         items={[
           { label: "Assigned to me", value: stats.assigned, tone: "solid", icon: <Icon.Pin width={16} height={16} /> },
-          { label: "Open", value: stats.open, tone: "plain", icon: <Icon.Alert width={16} height={16} /> },
           { label: "In progress", value: stats.inProgress, tone: "plain", icon: <Icon.Clock width={16} height={16} /> },
+          { label: "Overdue", value: stats.overdue, tone: "plain", icon: <Icon.Alert width={16} height={16} /> },
           { label: "Resolved", value: stats.resolved, tone: "plain", icon: <Icon.Check width={16} height={16} /> },
         ]}
       />
@@ -188,6 +197,8 @@ export default function TechnicianDashboard() {
           {filtered.map((r) => {
             const open = expandedId === r.id;
             const busy = saving === r.id;
+            const mine = isAssignedTo(r, me);
+            const nextStatuses = allowedNextStatuses("technician", r.status);
             return (
               <li
                 key={r.id}
@@ -208,6 +219,7 @@ export default function TechnicianDashboard() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-ink">{r.title}</h3>
                       <PriorityBadge priority={r.priority} />
+                      <TargetBadge createdAt={createdDate(r)} priority={r.priority} status={r.status} />
                     </div>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
                       <Icon.Pin width={14} height={14} />
@@ -226,7 +238,7 @@ export default function TechnicianDashboard() {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     <StatusBadge status={r.status} />
-                    <span className="text-xs text-muted">{r.createdAt?.toDate?.()?.toLocaleDateString() || "—"}</span>
+                    <span className="text-xs text-muted">{createdDate(r)?.toLocaleDateString() || "—"}</span>
                     <Icon.ChevronDown
                       width={18}
                       height={18}
@@ -254,65 +266,85 @@ export default function TechnicianDashboard() {
                           </a>
                         </div>
                       )}
+                      <div>
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">History</p>
+                        <Timeline reportId={r.id} refreshKey={historyVersion} />
+                      </div>
                     </div>
 
                     <div className="space-y-5">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Update status</p>
-                        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          {STATUSES.map((s) => {
-                            const current = r.status === s.value;
-                            return (
-                              <button
-                                key={s.value}
-                                onClick={() => updateStatus(r.id, s.value)}
-                                disabled={current || busy}
-                                className={cx(
-                                  "rounded-lg border px-2 py-2 text-xs font-semibold transition disabled:cursor-not-allowed",
-                                  current
-                                    ? "border-brand bg-brand text-on-brand"
-                                    : "border-line bg-surface text-ink-2 hover:border-line-strong hover:bg-surface-2 disabled:opacity-50"
-                                )}
-                              >
-                                {s.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
+                      {actionError?.id === r.id && <Alert tone="error">{actionError.message}</Alert>}
 
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Resolution note</p>
-                        {r.resolutionNote && (
-                          <div className="mt-2 rounded-lg border border-line-strong bg-surface-2 px-3.5 py-3 text-sm text-ink">
-                            {r.resolutionNote}
+                      {!mine ? (
+                        <Alert tone="info">
+                          {r.assignedTo
+                            ? `This report is assigned to ${r.assignedTo}. Only the assigned technician can update it.`
+                            : "This report is not assigned yet. An administrator assigns reports to technicians."}
+                        </Alert>
+                      ) : (
+                        <>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Update status</p>
+                            <p className="mt-2 text-sm text-ink-2">
+                              Current status: <span className="font-medium text-ink">{statusLabel(r.status)}</span>
+                            </p>
+                            {nextStatuses.length === 0 ? (
+                              <p className="mt-2 text-sm text-muted">
+                                {r.status === "closed"
+                                  ? "This report is closed. Only an administrator can reopen it."
+                                  : "No further status changes are available to you."}
+                              </p>
+                            ) : (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {nextStatuses.map((s) => (
+                                  <button
+                                    key={s}
+                                    onClick={() => updateStatus(r, s)}
+                                    disabled={busy}
+                                    className={btn.secondary}
+                                  >
+                                    {r.status === "resolved" && s === "in-progress" ? "Resume work" : `Mark as ${statusLabel(s).toLowerCase()}`}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        )}
-                        <form
-                          className="mt-2 flex gap-2"
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            saveNote(r.id);
-                          }}
-                        >
-                          <input
-                            aria-label="Resolution note"
-                            value={noteInputs[r.id] || ""}
-                            onChange={(e) =>
-                              setNoteInputs((prev) => ({ ...prev, [r.id]: e.target.value }))
-                            }
-                            placeholder={r.resolutionNote ? "Replace the note…" : "What was done to fix it?"}
-                            className={inputCls}
-                          />
-                          <button
-                            type="submit"
-                            disabled={busy || !noteInputs[r.id]?.trim()}
-                            className={cx(btn.primary, "shrink-0")}
-                          >
-                            {busy ? <Spinner /> : "Save"}
-                          </button>
-                        </form>
-                      </div>
+
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Resolution note</p>
+                            {r.resolutionNote && (
+                              <div className="mt-2 rounded-lg border border-line-strong bg-surface-2 px-3.5 py-3 text-sm text-ink">
+                                {r.resolutionNote}
+                              </div>
+                            )}
+                            <form
+                              className="mt-2 flex gap-2"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                saveNote(r);
+                              }}
+                            >
+                              <input
+                                aria-label="Resolution note"
+                                value={noteInputs[r.id] || ""}
+                                onChange={(e) =>
+                                  setNoteInputs((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                }
+                                maxLength={1000}
+                                placeholder={r.resolutionNote ? "Replace the note…" : "What was done to fix it?"}
+                                className={inputCls}
+                              />
+                              <button
+                                type="submit"
+                                disabled={busy || !noteInputs[r.id]?.trim()}
+                                className={cx(btn.primary, "shrink-0")}
+                              >
+                                {busy ? <Spinner /> : "Save"}
+                              </button>
+                            </form>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}

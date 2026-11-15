@@ -184,6 +184,73 @@ This means the app relies on client-side route checks plus the stored role in Fi
   - Priority Maintenance (`urgent`) → `high`
   - Emergency Maintenance (`emergency`) → `critical`
 
+## Maintenance Workflow (bachelor's thesis extension)
+
+The coursework version of this project is tagged `coursework-baseline`. The
+functionality below was added afterwards.
+
+### Status workflow
+
+A report moves `open` → `in-progress` → `resolved` → `closed`. Allowed changes depend on the role:
+
+| Role | Allowed status changes |
+| --- | --- |
+| Technician (assigned reports only) | open → in-progress, in-progress → resolved, resolved → in-progress |
+| Administrator | the above, plus close from any status, return in-progress → open, reopen closed → open |
+
+### Assignment
+
+Reports store the assigned technician's account ID (`assignedToId`) together
+with the name (`assignedTo`) for display. Reports assigned before this field
+existed are matched by name. Assigning an open report moves it to `in-progress`.
+
+### Triage
+
+The initial priority comes from the resident's classification. An administrator
+can override it with a recorded reason (`priorityOverridden`, `priorityReason`).
+A resident can no longer edit a report once it has been triaged or assigned.
+
+### Target resolution times
+
+| Priority | Target |
+| --- | --- |
+| Critical | 4 hours |
+| High | 24 hours |
+| Medium | 72 hours |
+| Low | 168 hours (7 days) |
+
+An active report past its target is shown as overdue. The targets are defined in
+`lib/maintenance.ts` (`TARGET_HOURS`).
+
+### History (audit trail)
+
+Every change is written to `status_log` in the same batch as the change itself.
+Entry fields: `reportId`, `type` (`created`, `edited`, `status`, `assignment`,
+`priority`, `note`), `from`, `to`, `note`, `actorId`, `actorName`, `actorRole`,
+`timestamp`. The history is shown as a timeline to residents, technicians and
+administrators.
+
+### Input validation
+
+Report input, resolution notes, priority overrides and new users are validated
+with Zod schemas in `lib/maintenance.ts`. Photos must be JPG, PNG or WebP and at
+most 5 MB.
+
+### Code structure
+
+- `lib/maintenance.ts` — domain rules (priority, status workflow, targets, validation); no Firebase or React.
+- `lib/reports.ts` — data operations that change a report and write its history entry atomically.
+- `components/Timeline.tsx` — history timeline and target-time indicator.
+- `tests/maintenance.test.ts` — unit tests of the domain rules.
+
+## Testing
+
+```bash
+npm test
+```
+
+Runs the unit tests with Vitest.
+
 ## Environment Variables
 
 Create a `.env.local` file in the project root with the Firebase client configuration.
