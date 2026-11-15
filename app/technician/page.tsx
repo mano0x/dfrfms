@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
 import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { allowedNextStatuses, isAssignedTo, isOverdue, type Status } from "@/lib/maintenance";
 import { changeStatus, saveResolutionNote, type Actor } from "@/lib/reports";
@@ -33,7 +32,7 @@ type Report = {
 };
 
 export default function TechnicianDashboard() {
-  const { user, role, loading } = useAuth();
+  const { user, role, loading, signOut } = useAuth();
   const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -142,7 +141,7 @@ export default function TechnicianDashboard() {
       role="technician"
       name={displayName}
       detail={userProfile?.specialization || undefined}
-      onSignOut={() => signOut(auth).then(() => router.push("/"))}
+      onSignOut={() => signOut().then(() => router.push("/"))}
     >
       <PageHeader
         title="Work queue"

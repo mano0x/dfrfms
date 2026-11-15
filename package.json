@@ -17,10 +17,11 @@
     "dev:emulator": "node scripts/dev-emulator.mjs",
     "appwrite:setup": "node --env-file=.env.local scripts/appwrite-setup.mjs",
     "appwrite:check": "node --env-file=.env.local scripts/appwrite-setup.mjs --check",
-    "appwrite:verify": "node --env-file=.env.local scripts/appwrite-verify.mjs"
+    "appwrite:verify": "node --env-file=.env.local scripts/appwrite-verify.mjs",
+    "appwrite:test-users": "node --env-file=.env.local scripts/appwrite-test-users.mjs",
+    "test:api": "node --env-file=.env.local node_modules/vitest/vitest.mjs run tests/api --testTimeout=60000 --no-file-parallelism"
   },
   "dependencies": {
-    "appwrite": "^29.2.0",
     "firebase": "^12.15.0",
     "firebase-admin": "^14.0.0",
     "next": "16.4.6",

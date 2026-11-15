@@ -1,12 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
 import {
   collection, addDoc, getDocs, query, where, serverTimestamp, updateDoc, doc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { auth, db, storage } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { firstError, priorityForClassification, reportInputSchema, validatePhoto } from "@/lib/maintenance";
 import { logReportCreated, logReportEdited, type Actor } from "@/lib/reports";
@@ -81,7 +80,7 @@ function UrgencyPicker({ value, onChange, name }: { value: string; onChange: (v:
 }
 
 export default function StudentDashboard() {
-  const { user, role, loading } = useAuth();
+  const { user, role, loading, signOut } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"submit" | "history">("submit");
   const [reports, setReports] = useState<Report[]>([]);
@@ -316,7 +315,7 @@ export default function StudentDashboard() {
       role="student"
       name={displayName}
       detail={location}
-      onSignOut={() => signOut(auth).then(() => router.push("/"))}
+      onSignOut={() => signOut().then(() => router.push("/"))}
     >
       <PageHeader
         title={`Hi, ${firstName}`}

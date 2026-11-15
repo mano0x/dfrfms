@@ -50,6 +50,7 @@ const text = (key, size, required = false) => ({ kind: "varchar", key, size, req
 const choice = (key, elements, required = false) => ({ kind: "enum", key, elements, required });
 const date = (key, required = false) => ({ kind: "datetime", key, required });
 const flag = (key, required = false) => ({ kind: "boolean", key, required });
+const whole = (key, required = false) => ({ kind: "integer", key, required });
 
 // Row IDs: users use the account ID; reports and history keep their
 // Firestore document IDs so existing relationships stay valid.
@@ -122,6 +123,18 @@ const TABLES = [
       { key: "reportId", type: TablesDBIndexType.Key, columns: ["reportId"] },
     ],
   },
+  {
+    // Failed sign-in counters for brute-force protection. The row ID is a
+    // hash of the email address, so no address is stored here.
+    id: "auth_attempts",
+    name: "Sign-in attempts",
+    columns: [
+      whole("failedCount", true),
+      date("windowStart", true),
+      date("lockedUntil"),
+    ],
+    indexes: [],
+  },
 ];
 
 const BUCKET = {
@@ -169,6 +182,7 @@ function createColumn(tableId, c) {
     case "enum": return tablesDB.createEnumColumn({ ...common, elements: c.elements });
     case "datetime": return tablesDB.createDatetimeColumn(common);
     case "boolean": return tablesDB.createBooleanColumn(common);
+    case "integer": return tablesDB.createIntegerColumn(common);
     default: throw new Error(`Unknown column kind: ${c.kind}`);
   }
 }

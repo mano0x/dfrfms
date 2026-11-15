@@ -1,7 +1,7 @@
 /**
- * Appwrite identifiers shared by the browser and the server.
- * Nothing here is secret: the endpoint and project ID are public by design.
- * The server API key is read only in lib/appwrite/server.ts.
+ * Appwrite identifiers. Nothing here is secret: the endpoint and project ID
+ * are public by design. The server API key is read only in
+ * lib/appwrite/server.ts.
  *
  * Keep the IDs in step with scripts/appwrite-setup.mjs.
  */
@@ -16,6 +16,7 @@ export const TABLES = {
   users: "users",
   reports: "fault_reports",
   history: "status_log",
+  loginAttempts: "auth_attempts",
 } as const;
 
 export const PHOTO_BUCKET_ID = "dormitory-fault-photos";

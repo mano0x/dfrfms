@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut, createUserWithEmailAndPassword } from "firebase/auth";
-import { collection, getDocs, doc, query, orderBy, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db, getAccountCreationAuth } from "@/lib/firebase";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import {
   allowedNextStatuses, firstError, isOverdue, newUserSchema, priorityForClassification,
@@ -58,7 +58,7 @@ const tableSelect =
   "ui-select rounded-md border border-line bg-surface py-1.5 pl-2.5 text-xs font-medium text-ink transition hover:border-line-strong focus:border-brand focus:outline-none focus:ring-4 focus:ring-ring disabled:opacity-60";
 
 export default function AdminDashboard() {
-  const { user, role, loading } = useAuth();
+  const { user, role, loading, signOut } = useAuth();
   const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -162,44 +162,23 @@ export default function AdminDashboard() {
   const handleCreateUser = async () => {
     const parsed = newUserSchema.safeParse({ name: newName, email: newEmail, password: newPassword, role: newRole });
     if (!parsed.success) { setCreateMsg(firstError(parsed)); return; }
-    const { name, email, password, role: userRole } = parsed.data;
+    const { name, email } = parsed.data;
 
     setCreating(true);
     setCreateMsg("");
-    const creationAuth = getAccountCreationAuth();
     try {
-      // 1. Create the sign-in account on a separate auth instance so the
-      //    admin stays signed in.
-      const cred = await createUserWithEmailAndPassword(creationAuth, email, password);
-
-      // 2. Save the profile under the account's UID — this is the document
-      //    the login page and AuthContext read to find the user's role.
-      //    Written with the admin's own session, as required by the rules.
-      await setDoc(doc(db, "users", cred.user.uid), {
-        name,
-        email,
-        role: userRole,
-        dormitory: userRole === "student" ? newDorm.trim() || null : null,
-        roomNumber: userRole === "student" ? newRoom.trim() || null : null,
-        specialization: userRole === "technician" ? newSpec.trim() || null : null,
-        createdAt: serverTimestamp(),
+      // The server creates the sign-in account, applies the role and saves
+      // the profile. It checks again that the caller is an administrator.
+      await api("/api/users", {
+        method: "POST",
+        body: { ...parsed.data, dormitory: newDorm, roomNumber: newRoom, specialization: newSpec },
       });
-
       setCreateMsg(`✓ User "${name}" created. They can now sign in with ${email}.`);
       setNewName(""); setNewEmail(""); setNewDorm(""); setNewRoom(""); setNewSpec(""); setNewPassword("");
       fetchData();
     } catch (err) {
-      const code = (err as { code?: string }).code;
-      setCreateMsg(
-        code === "auth/email-already-in-use" ? "An account with this email already exists." :
-        code === "auth/invalid-email" ? "That email address is not valid." :
-        code === "auth/weak-password" ? "The starting password is too weak." :
-        code === "auth/operation-not-allowed" ? "Email/password sign-in is not enabled in Firebase Authentication." :
-        code === "permission-denied" ? "The account was created, but saving the profile was blocked by the security rules." :
-        "Could not create the user. Please try again."
-      );
+      setCreateMsg(err instanceof ApiError ? err.message : "Could not create the user. Please try again.");
     } finally {
-      await signOut(creationAuth).catch(() => {});
       setCreating(false);
     }
   };
@@ -253,7 +232,7 @@ export default function AdminDashboard() {
       role="admin"
       name={users.find((u) => u.id === user?.uid)?.name || user?.email || "Administrator"}
       detail="Administrator"
-      onSignOut={() => signOut(auth).then(() => router.push("/"))}
+      onSignOut={() => signOut().then(() => router.push("/"))}
     >
       <PageHeader
         title="Admin console"
@@ -537,9 +516,9 @@ export default function AdminDashboard() {
               <p className="text-sm font-semibold">About user profiles</p>
             </div>
             <p className="mt-2 text-sm leading-6 text-muted">
-              This creates the person&apos;s sign-in account (email and starting password) in Firebase
-              Authentication and saves their profile under the same account ID. The role decides which
-              dashboard they see after signing in.
+              This creates the person&apos;s sign-in account (email and starting password) and their
+              profile. The role is applied on the server and decides which dashboard they see after
+              signing in.
             </p>
           </Card>
         </div>

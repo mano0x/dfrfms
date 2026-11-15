@@ -1,9 +1,8 @@
 "use client";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { ApiError, api } from "@/lib/api";
+import { useAuth, type AuthUser } from "@/lib/AuthContext";
 import { useRouter } from "next/navigation";
 import { Alert, Brand, Field, Icon, ROLES, Spinner, btn, cx, inputCls, isRole } from "@/components/ui";
 
@@ -39,6 +38,7 @@ export default function LoginPage({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { refresh } = useAuth();
 
   // The role must be chosen first on the home page.
   useEffect(() => {
@@ -49,26 +49,16 @@ export default function LoginPage({
     setError("");
     setLoading(true);
     try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      const snap = await getDoc(doc(db, "users", cred.user.uid));
-      if (!snap.exists()) {
-        await signOut(auth);
-        setError("This account has no user profile yet. Ask your administrator to set it up.");
-        return;
-      }
-
-      const role = snap.data().role;
-      if (role !== selectedRole) {
-        // Signed in with the wrong role selected: undo the sign-in.
-        await signOut(auth);
-        const actual = ROLES.find((r) => r.value === role)?.label.toLowerCase() ?? "different";
-        setError(`This is a ${actual} account, not a ${roleInfo?.label.toLowerCase()} account. Go back and choose the right role.`);
-        return;
-      }
-
-      router.push(`/${role}`);
-    } catch {
-      setError("Invalid email or password.");
+      // The server checks the password, the lockout and that the account
+      // really has the chosen role, then sets the session cookie.
+      const { user } = await api<{ user: AuthUser }>("/api/auth/login", {
+        method: "POST",
+        body: { email, password, role: selectedRole },
+      });
+      await refresh();
+      router.push(`/${user.role}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Sign-in failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -166,6 +156,12 @@ export default function LoginPage({
                 />
               </div>
             </Field>
+
+            <div className="-mt-2 text-right">
+              <Link href="/forgot-password" className="text-sm font-medium text-ink-2 underline-offset-4 hover:text-ink hover:underline">
+                Forgot your password?
+              </Link>
+            </div>
 
             {error && <Alert tone="error">{error}</Alert>}
 

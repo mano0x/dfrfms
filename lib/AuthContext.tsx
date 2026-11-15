@@ -1,48 +1,77 @@
 "use client";
-import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { api } from "./api";
+import type { Role } from "./maintenance";
 
-type Role = "student" | "technician" | "admin" | null;
+export type AuthUser = {
+  uid: string;
+  email: string;
+  name: string;
+  role: Role;
+  dormitory: string | null;
+  roomNumber: string | null;
+  specialization: string | null;
+};
 
 interface AuthContextType {
-  user: User | null;
-  role: Role;
+  user: AuthUser | null;
+  role: Role | null;
   loading: boolean;
+  /** Ask the server again who is signed in (after sign-in, for example). */
+  refresh: () => Promise<AuthUser | null>;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
   loading: true,
+  refresh: async () => null,
+  signOut: async () => {},
 });
 
+/**
+ * Who is signed in. The answer always comes from the server (/api/auth/me),
+ * which reads the httpOnly session cookie; the role shown here is only for
+ * choosing what to display - every action is authorised again on the server.
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<Role>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        const snap = await getDoc(doc(db, "users", firebaseUser.uid));
-        if (snap.exists()) {          
-          setRole(snap.data().role as Role);
-        }
-      } else {
-        setUser(null);
-        setRole(null);
-      }
+  const refresh = useCallback(async () => {
+    try {
+      const { user: current } = await api<{ user: AuthUser | null }>("/api/auth/me");
+      setUser(current);
+      return current;
+    } catch {
+      setUser(null);
+      return null;
+    } finally {
       setLoading(false);
-    });
-    return () => unsubscribe();
+    }
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await api("/api/auth/logout", { method: "POST" }).catch(() => {});
+    setUser(null);
+  }, []);
+
+  // Ask the server once, when the application loads.
+  useEffect(() => {
+    let active = true;
+    api<{ user: AuthUser | null }>("/api/auth/me")
+      .then(({ user: current }) => { if (active) setUser(current); })
+      .catch(() => { if (active) setUser(null); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, role, loading }}>
-      {children}    
+    <AuthContext.Provider value={{ user, role: user?.role ?? null, loading, refresh, signOut }}>
+      {children}
     </AuthContext.Provider>
   );
 }
