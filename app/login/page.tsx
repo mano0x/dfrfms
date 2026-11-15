@@ -82,7 +82,10 @@ export default function LoginPage({
       {/* Information panel */}
       <aside className="border-b border-line bg-surface-2 px-6 py-6 text-muted sm:px-10 lg:flex lg:items-center lg:border-b-0 lg:border-r lg:px-16 lg:py-10">
         <div className="mx-auto w-full max-w-md lg:mx-0">
-          <Icon.Logo width={28} height={28} className="hidden text-ink lg:block" />
+          <div className="hidden items-center gap-2.5 text-ink lg:flex">
+            <Icon.Logo width={28} height={28} />
+            <span className="text-xl font-bold tracking-tight">DFRMMS</span>
+          </div>
           <h2 className="text-lg lg:mt-4 lg:text-xl font-semibold leading-snug text-ink">
             Dormitory Fault Reporting and Maintenance Management System
           </h2>
