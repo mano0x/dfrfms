@@ -14,12 +14,16 @@
     "test:rules": "firebase emulators:exec --only firestore,storage --project demo-dfrmms \"vitest run tests/rules\"",
     "emulators": "firebase emulators:start --only auth,firestore,storage --project demo-dfrmms",
     "seed:emulator": "node scripts/seed-emulator.mjs",
-    "dev:emulator": "node scripts/dev-emulator.mjs"
+    "dev:emulator": "node scripts/dev-emulator.mjs",
+    "appwrite:setup": "node --env-file=.env.local scripts/appwrite-setup.mjs",
+    "appwrite:check": "node --env-file=.env.local scripts/appwrite-setup.mjs --check"
   },
   "dependencies": {
+    "appwrite": "^29.2.0",
     "firebase": "^12.15.0",
     "firebase-admin": "^14.0.0",
     "next": "16.4.6",
+    "node-appwrite": "^31.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.4.3"
