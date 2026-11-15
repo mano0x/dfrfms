@@ -10,18 +10,18 @@ import { Alert, Brand, Field, Icon, ROLES, Spinner, btn, cx, inputCls, isRole } 
 const FEATURES = [
   {
     icon: Icon.Clipboard,
-    title: "Report in under a minute",
-    body: "Describe the fault, add a photo, and the priority is calculated for you.",
+    title: "Report maintenance problems",
+    body: "Submit a fault with a short description and an optional photo.",
+  },
+  {
+    icon: Icon.Clock,
+    title: "Track repair progress",
+    body: "Check the status of each report and read notes from the technician.",
   },
   {
     icon: Icon.Wrench,
-    title: "Technicians stay on track",
-    body: "Assigned jobs, status updates and resolution notes in one queue.",
-  },
-  {
-    icon: Icon.Chart,
-    title: "Full oversight for admins",
-    body: "Search every report, assign work and manage dormitory users.",
+    title: "Manage maintenance requests",
+    body: "Staff assign, update and close requests in one place.",
   },
 ];
 
@@ -79,50 +79,30 @@ export default function LoginPage({
 
   return (
     <div className="grid min-h-screen bg-bg lg:grid-cols-[1.05fr_1fr]">
-      {/* Brand panel */}
-      <aside className="relative hidden overflow-hidden bg-[#0a0a0a] border-r border-white/10 p-12 text-white lg:flex lg:flex-col lg:justify-between">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.05]"
-          style={{
-            backgroundImage:
-              "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
-          }}
-        />
-
-        <div className="relative flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-xl bg-white/10 ring-1 ring-white/20">
-            <Icon.Logo width={24} height={24} strokeWidth={2} />
-          </span>
-          <div className="leading-tight">
-            <p className="text-xl font-bold tracking-tight">DFRFMS</p>
-            <p className="text-sm text-white/60">Dormitory Facility Management</p>
-          </div>
-        </div>
-
-        <div className="relative max-w-md">
-          <h2 className="text-4xl font-bold leading-tight tracking-tight">
-            Report it once.
-            <br />
-            <span className="text-white/50">Track it until it&apos;s fixed.</span>
+      {/* Information panel */}
+      <aside className="border-b border-slate-200 bg-slate-50 px-6 py-6 text-slate-600 sm:px-10 lg:flex lg:items-center lg:border-b-0 lg:border-r lg:px-16 lg:py-10 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        <div className="mx-auto w-full max-w-md lg:mx-0">
+          <Icon.Logo width={28} height={28} className="hidden text-[#1f3a5f] lg:block dark:text-slate-300" />
+          <h2 className="text-lg lg:mt-4 lg:text-xl font-semibold leading-snug text-[#1f3a5f] dark:text-slate-100">
+            Dormitory Fault Reporting and Facility Management System
           </h2>
-          <ul className="mt-10 space-y-6">
+          <p className="mt-3 text-sm leading-6">
+            Students can report problems in their dormitory rooms and follow the repair progress online.
+            Technicians and administrators use the same system to handle and resolve the requests.
+          </p>
+
+          <ul className="mt-8 hidden space-y-5 lg:block">
             {FEATURES.map(({ icon: I, title, body }) => (
-              <li key={title} className="flex gap-4">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/15">
-                  <I />
-                </span>
+              <li key={title} className="flex gap-3">
+                <I width={20} height={20} className="mt-0.5 shrink-0 text-[#1f3a5f] dark:text-slate-300" />
                 <div>
-                  <p className="font-semibold">{title}</p>
-                  <p className="mt-0.5 text-sm text-white/65">{body}</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{title}</p>
+                  <p className="mt-0.5 text-sm">{body}</p>
                 </div>
               </li>
             ))}
           </ul>
         </div>
-
-        <p className="relative text-xs text-white/45">Dormitory Fault Reporting &amp; Facility Management System</p>
       </aside>
 
       {/* Sign-in form */}
