@@ -16,7 +16,8 @@
     "seed:emulator": "node scripts/seed-emulator.mjs",
     "dev:emulator": "node scripts/dev-emulator.mjs",
     "appwrite:setup": "node --env-file=.env.local scripts/appwrite-setup.mjs",
-    "appwrite:check": "node --env-file=.env.local scripts/appwrite-setup.mjs --check"
+    "appwrite:check": "node --env-file=.env.local scripts/appwrite-setup.mjs --check",
+    "appwrite:verify": "node --env-file=.env.local scripts/appwrite-verify.mjs"
   },
   "dependencies": {
     "appwrite": "^29.2.0",
