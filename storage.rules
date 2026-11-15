@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// Storage rules for fault report photos.
+// Path: fault-photos/{userId}/{fileName}
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /fault-photos/{userId}/{fileName} {
+      // Photos are shown to the resident and to maintenance staff.
+      allow read: if request.auth != null;
+
+      // A user uploads only into their own folder: images up to 5 MB.
+      // `resource == null` means no file exists at this path yet, so an
+      // upload can never overwrite an existing photo.
+      allow create: if request.auth != null
+        && resource == null
+        && request.auth.uid == userId
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+
+      // Uploaded evidence cannot be replaced or removed by users.
+      allow update, delete: if false;
+    }
+
+    // Everything else is closed.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

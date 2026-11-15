@@ -14,7 +14,7 @@ import { TargetBadge, Timeline } from "@/components/Timeline";
 import {
   Alert, AppShell, Card, Detail, Field, Icon, LoadingScreen, PRIORITIES, PageHeader, PriorityBadge,
   STATUSES, Spinner, StatGrid, StatusBadge, Tabs, Tag, URGENCIES, btn, categoryLabel, cx, inputCls,
-  selectCls, statusLabel,
+  selectCls, selectInlineCls, statusLabel,
 } from "@/components/ui";
 
 type Report = {
@@ -29,6 +29,7 @@ type Report = {
   dormitory: string;
   roomNumber: string;
   studentName: string;
+  studentId: string;
   description: string;
   createdAt: any;
   assignedTo?: string | null;
@@ -305,11 +306,11 @@ export default function AdminDashboard() {
                 className={cx(inputCls, "pl-10")}
               />
             </div>
-            <select aria-label="Filter by status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={cx(selectCls, "w-auto min-w-40")}>
+            <select aria-label="Filter by status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={cx(selectInlineCls, "min-w-40")}>
               <option value="all">All statuses</option>
               {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
-            <select aria-label="Filter by priority" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className={cx(selectCls, "w-auto min-w-40")}>
+            <select aria-label="Filter by priority" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className={cx(selectInlineCls, "min-w-40")}>
               <option value="all">All priorities</option>
               {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>

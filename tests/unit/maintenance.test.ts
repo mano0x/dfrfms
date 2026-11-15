@@ -3,7 +3,7 @@ import {
   MAX_PHOTO_BYTES, TARGET_HOURS, allowedNextStatuses, isAssignedTo, canChangeStatus, dueDate, firstError,
   isOverdue, newUserSchema, priorityForClassification, priorityOverrideSchema,
   reportInputSchema, resolutionNoteSchema, targetLabel, validatePhoto,
-} from "../lib/maintenance";
+} from "../../lib/maintenance";
 
 const HOUR = 60 * 60 * 1000;
 const created = new Date("2026-11-10T08:00:00Z");

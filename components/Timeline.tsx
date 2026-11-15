@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { fetchTimeline, type LogEntry } from "@/lib/reports";
+import { useAuth } from "@/lib/AuthContext";
 import { isOverdue, targetLabel } from "@/lib/maintenance";
 import { Icon, Spinner, cx, statusLabel } from "@/components/ui";
 
@@ -28,10 +29,12 @@ function describe(e: LogEntry): { text: string; detail?: string } {
 export function Timeline({ reportId, refreshKey = 0 }: { reportId: string; refreshKey?: number }) {
   const [entries, setEntries] = useState<LogEntry[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const { user, role } = useAuth();
 
   useEffect(() => {
+    if (!user || !role) return;
     let cancelled = false;
-    fetchTimeline(reportId)
+    fetchTimeline(reportId, { uid: user.uid, role })
       .then((list) => {
         if (cancelled) return;
         setEntries(list);
@@ -44,7 +47,7 @@ export function Timeline({ reportId, refreshKey = 0 }: { reportId: string; refre
     return () => {
       cancelled = true;
     };
-  }, [reportId, refreshKey]);
+  }, [reportId, refreshKey, user, role]);
 
   if (failed) return <p className="text-sm text-muted">The history could not be loaded.</p>;
   if (entries === null) {

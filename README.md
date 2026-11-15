@@ -243,13 +243,47 @@ most 5 MB.
 - `components/Timeline.tsx` — history timeline and target-time indicator.
 - `tests/maintenance.test.ts` — unit tests of the domain rules.
 
+## Security Rules
+
+Access is enforced on the server by `firestore.rules` and `storage.rules`
+(least privilege); the checks in the pages are only for usability.
+
+| Data | Resident (student) | Technician | Administrator |
+| --- | --- | --- | --- |
+| User profiles | Own profile only | Own profile only | Read all; create, update, delete (not own) |
+| Fault reports: read | Own reports only | All | All |
+| Fault reports: create | For themselves; open, unassigned, valid content, priority matching the classification | No | No |
+| Fault reports: update | Own report while open, unassigned and not triaged; content fields only | Assigned reports only; status (technician workflow) and resolution note only | Status (admin workflow), assignment, priority; never the reporter or submission time |
+| Fault reports: delete | No | No | Yes |
+| History (`status_log`) | Read own reports' history; add "created"/"edited" entries for own reports | Read all; add "status"/"note" entries for assigned reports | Read all; add any entry |
+| Photos (Storage) | View; upload JPG/PNG/WebP up to 5 MB into own folder | View | View |
+
+History entries must carry the writer's real account ID and role and the server
+time, and can never be changed or deleted. Uploaded photos cannot be replaced or
+deleted. Accounts without a profile have no access.
+
 ## Testing
 
+| Command | What it runs | Needs |
+| --- | --- | --- |
+| `npm test` | Unit tests of the domain rules (`tests/unit`) | Node.js |
+| `npm run test:rules` | Security rule tests for Firestore and Storage (`tests/rules`) on the local Firebase emulator | Node.js and Java 21+ |
+
+The rule tests start the emulators, run, and stop them again. They never touch
+the live Firebase project (they use the local-only project ID `demo-dfrmms`).
+
+### Running the whole app against the emulator
+
+For manual testing with made-up accounts instead of live data:
+
 ```bash
-npm test
+npm run emulators        # terminal 1: local Auth, Firestore and Storage
+npm run seed:emulator    # terminal 2: test accounts and sample reports
+npm run dev:emulator     # terminal 2: the app, connected to the emulators
 ```
 
-Runs the unit tests with Vitest.
+The test accounts and their password are listed in `scripts/seed-emulator.mjs`.
+They exist only inside the local emulator.
 
 ## Environment Variables
 

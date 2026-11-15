@@ -32,16 +32,27 @@ export type LogEntry = {
   timestamp?: Timestamp | null;
 };
 
-type ReportRef = { id: string; status: string; priority?: string; assignedTo?: string | null; assignedToId?: string | null };
+type ReportRef = {
+  id: string;
+  /** Account ID of the resident who reported the fault. */
+  studentId: string;
+  status: string;
+  priority?: string;
+  assignedTo?: string | null;
+  assignedToId?: string | null;
+};
 
 function addLog(
   batch: WriteBatch,
-  reportId: string,
+  report: { id: string; studentId: string },
   actor: Actor,
   entry: { type: LogType; from?: string | null; to?: string | null; note?: string }
 ) {
   batch.set(doc(collection(db, "status_log")), {
-    reportId,
+    reportId: report.id,
+    // Stored on every entry so a resident can be given access to the
+    // history of their own reports only (see firestore.rules).
+    reportOwnerId: report.studentId,
     type: entry.type,
     from: entry.from ?? null,
     to: entry.to ?? null,
@@ -56,14 +67,14 @@ function addLog(
 /** History entry for a newly created report (called right after creation). */
 export async function logReportCreated(reportId: string, actor: Actor) {
   const batch = writeBatch(db);
-  addLog(batch, reportId, actor, { type: "created", to: "open" });
+  addLog(batch, { id: reportId, studentId: actor.uid }, actor, { type: "created", to: "open" });
   await batch.commit();
 }
 
 /** History entry for a resident's edit of their own open report. */
 export async function logReportEdited(reportId: string, actor: Actor) {
   const batch = writeBatch(db);
-  addLog(batch, reportId, actor, { type: "edited" });
+  addLog(batch, { id: reportId, studentId: actor.uid }, actor, { type: "edited" });
   await batch.commit();
 }
 
@@ -74,7 +85,7 @@ export async function changeStatus(report: ReportRef, to: Status, actor: Actor) 
   }
   const batch = writeBatch(db);
   batch.update(doc(db, "fault_reports", report.id), { status: to, updatedAt: serverTimestamp() });
-  addLog(batch, report.id, actor, { type: "status", from: report.status, to });
+  addLog(batch, report, actor, { type: "status", from: report.status, to });
   await batch.commit();
 }
 
@@ -97,13 +108,13 @@ export async function assignTechnician(
     status: nextStatus,
     updatedAt: serverTimestamp(),
   });
-  addLog(batch, report.id, actor, {
+  addLog(batch, report, actor, {
     type: "assignment",
     from: report.assignedTo || null,
     to: technician ? technician.name : null,
   });
   if (nextStatus !== report.status) {
-    addLog(batch, report.id, actor, { type: "status", from: report.status, to: nextStatus });
+    addLog(batch, report, actor, { type: "status", from: report.status, to: nextStatus });
   }
   await batch.commit();
   return nextStatus;
@@ -121,7 +132,7 @@ export async function overridePriority(report: ReportRef, priority: Priority, re
     priorityReason: parsed.data.reason,
     updatedAt: serverTimestamp(),
   });
-  addLog(batch, report.id, actor, {
+  addLog(batch, report, actor, {
     type: "priority",
     from: report.priority ?? null,
     to: parsed.data.priority,
@@ -136,14 +147,20 @@ export async function saveResolutionNote(report: ReportRef, note: string, actor:
   if (!parsed.success) throw new Error(firstError(parsed));
   const batch = writeBatch(db);
   batch.update(doc(db, "fault_reports", report.id), { resolutionNote: parsed.data, updatedAt: serverTimestamp() });
-  addLog(batch, report.id, actor, { type: "note", note: parsed.data });
+  addLog(batch, report, actor, { type: "note", note: parsed.data });
   await batch.commit();
   return parsed.data;
 }
 
-/** All history entries of one report, oldest first. */
-export async function fetchTimeline(reportId: string): Promise<LogEntry[]> {
-  const snap = await getDocs(query(collection(db, "status_log"), where("reportId", "==", reportId)));
+/**
+ * All history entries of one report, oldest first. A resident may only read
+ * the history of their own reports, so their query is limited to entries they
+ * own; staff read the whole history.
+ */
+export async function fetchTimeline(reportId: string, viewer: { uid: string; role: Role }): Promise<LogEntry[]> {
+  const filters = [where("reportId", "==", reportId)];
+  if (viewer.role === "student") filters.push(where("reportOwnerId", "==", viewer.uid));
+  const snap = await getDocs(query(collection(db, "status_log"), ...filters));
   const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LogEntry));
   entries.sort((a, b) => (a.timestamp?.seconds ?? 0) - (b.timestamp?.seconds ?? 0));
   return entries;

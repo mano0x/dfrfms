@@ -10,7 +10,7 @@ import { changeStatus, saveResolutionNote, type Actor } from "@/lib/reports";
 import { TargetBadge, Timeline } from "@/components/Timeline";
 import {
   Alert, AppShell, EmptyState, Icon, LoadingScreen, PageHeader, PriorityBadge, STATUSES, STATUS_BAR,
-  Spinner, StatGrid, StatusBadge, Tabs, Tag, btn, categoryLabel, cx, inputCls, selectCls, statusLabel,
+  Spinner, StatGrid, StatusBadge, Tabs, Tag, btn, categoryLabel, cx, inputCls, selectCls, selectInlineCls, statusLabel,
 } from "@/components/ui";
 
 type Report = {
@@ -23,6 +23,7 @@ type Report = {
   dormitory: string;
   roomNumber: string;
   studentName: string;
+  studentId: string;
   assignedTo?: string | null;
   assignedToId?: string | null;
   resolutionNote?: string;
@@ -174,7 +175,7 @@ export default function TechnicianDashboard() {
           aria-label="Filter by status"
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className={cx(selectCls, "w-auto min-w-44")}
+          className={cx(selectInlineCls, "min-w-44")}
         >
           <option value="all">All statuses</option>
           {STATUSES.map((s) => (

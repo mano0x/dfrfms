@@ -69,6 +69,9 @@ export const inputCls =
 
 export const selectCls = `ui-select ${inputCls}`;
 
+/** A select that is only as wide as its content (for filter bars). */
+export const selectInlineCls = selectCls.replace("w-full", "w-auto");
+
 export const btn = {
   primary:
     "inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
