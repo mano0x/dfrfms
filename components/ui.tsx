@@ -342,10 +342,8 @@ export function Card({ className, children }: { className?: string; children: Re
 /* ------------------------------------------------------------------ */
 
 const STAT_TONE = {
-  brand: "bg-ink text-on-brand",
-  rose: "bg-surface-2 text-ink",
-  amber: "bg-surface-2 text-ink",
-  emerald: "bg-surface-2 text-ink",
+  solid: "bg-ink text-on-brand",
+  plain: "bg-surface-2 text-ink",
 };
 
 export function StatGrid({

@@ -80,10 +80,10 @@ export default function LoginPage({
   return (
     <div className="grid min-h-screen bg-bg lg:grid-cols-[1.05fr_1fr]">
       {/* Information panel */}
-      <aside className="border-b border-slate-200 bg-slate-50 px-6 py-6 text-slate-600 sm:px-10 lg:flex lg:items-center lg:border-b-0 lg:border-r lg:px-16 lg:py-10 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+      <aside className="border-b border-line bg-surface-2 px-6 py-6 text-muted sm:px-10 lg:flex lg:items-center lg:border-b-0 lg:border-r lg:px-16 lg:py-10">
         <div className="mx-auto w-full max-w-md lg:mx-0">
-          <Icon.Logo width={28} height={28} className="hidden text-[#1f3a5f] lg:block dark:text-slate-300" />
-          <h2 className="text-lg lg:mt-4 lg:text-xl font-semibold leading-snug text-[#1f3a5f] dark:text-slate-100">
+          <Icon.Logo width={28} height={28} className="hidden text-ink lg:block" />
+          <h2 className="text-lg lg:mt-4 lg:text-xl font-semibold leading-snug text-ink">
             Dormitory Fault Reporting and Facility Management System
           </h2>
           <p className="mt-3 text-sm leading-6">
@@ -94,9 +94,9 @@ export default function LoginPage({
           <ul className="mt-8 hidden space-y-5 lg:block">
             {FEATURES.map(({ icon: I, title, body }) => (
               <li key={title} className="flex gap-3">
-                <I width={20} height={20} className="mt-0.5 shrink-0 text-[#1f3a5f] dark:text-slate-300" />
+                <I width={20} height={20} className="mt-0.5 shrink-0 text-ink" />
                 <div>
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{title}</p>
+                  <p className="text-sm font-medium text-ink">{title}</p>
                   <p className="mt-0.5 text-sm">{body}</p>
                 </div>
               </li>

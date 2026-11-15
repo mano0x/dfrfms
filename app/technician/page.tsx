@@ -145,10 +145,10 @@ export default function TechnicianDashboard() {
 
       <StatGrid
         items={[
-          { label: "Assigned to me", value: stats.assigned, tone: "brand", icon: <Icon.Pin width={16} height={16} /> },
-          { label: "Open", value: stats.open, tone: "rose", icon: <Icon.Alert width={16} height={16} /> },
-          { label: "In progress", value: stats.inProgress, tone: "amber", icon: <Icon.Clock width={16} height={16} /> },
-          { label: "Resolved", value: stats.resolved, tone: "emerald", icon: <Icon.Check width={16} height={16} /> },
+          { label: "Assigned to me", value: stats.assigned, tone: "solid", icon: <Icon.Pin width={16} height={16} /> },
+          { label: "Open", value: stats.open, tone: "plain", icon: <Icon.Alert width={16} height={16} /> },
+          { label: "In progress", value: stats.inProgress, tone: "plain", icon: <Icon.Clock width={16} height={16} /> },
+          { label: "Resolved", value: stats.resolved, tone: "plain", icon: <Icon.Check width={16} height={16} /> },
         ]}
       />
 
