@@ -152,9 +152,9 @@ This means the app relies on client-side route checks plus the stored role in Fi
 ### Student report submission
 
 1. The student opens the submit form.
-2. The student enters a title, category, urgency, and description.
+2. The student enters a title, category, maintenance classification, and description.
 3. The student may upload a photo.
-4. The app calculates a priority value from category and urgency.
+4. The app calculates a priority value from the maintenance classification.
 5. The report is written to Firestore with status `open`.
 6. The report appears in the student’s history tab.
 
@@ -179,9 +179,10 @@ This means the app relies on client-side route checks plus the stored role in Fi
 - Students can only work with their own report history.
 - Technicians are redirected away from student/admin views if their role does not match.
 - Admins are redirected away from non-admin views if their role does not match.
-- Report priority is derived from category and urgency.
-- Emergency submissions always become `critical` priority.
-- Electrical and plumbing issues marked urgent are treated as higher priority than other urgent issues.
+- Report priority is derived from the maintenance classification (stored in the `urgency` field):
+  - Routine Maintenance (`normal`) → `low`
+  - Priority Maintenance (`urgent`) → `high`
+  - Emergency Maintenance (`emergency`) → `critical`
 
 ## Environment Variables
 

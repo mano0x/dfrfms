@@ -25,15 +25,14 @@ service cloud.firestore {
       return isSignedIn() && userRole() == 'student';
     }
 
+    // Priority follows the maintenance classification (stored as urgency):
+    // Emergency -> critical, Priority (urgent) -> high, Routine (normal) -> low.
     function validPriority() {
       return request.resource.data.priority ==
         (request.resource.data.urgency == 'emergency'
           ? 'critical'
           : request.resource.data.urgency == 'urgent'
-            ? (request.resource.data.category == 'electrical' ||
-               request.resource.data.category == 'plumbing'
-                ? 'high'
-                : 'medium')
+            ? 'high'
             : 'low');
     }
 

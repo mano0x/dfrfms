@@ -31,17 +31,19 @@ type Report = {
   photoURL?: string;
 };
 
-function calcPriority(category: string, urgency: string): string {
+// Priority follows the maintenance classification only:
+// Routine -> low, Priority -> high, Emergency -> critical.
+function calcPriority(urgency: string): string {
   if (urgency === "emergency") return "critical";
-  if (urgency === "urgent") return category === "electrical" || category === "plumbing" ? "high" : "medium";
+  if (urgency === "urgent") return "high";
   return "low";
 }
 
 const PRIORITY_EXPLAINER: Record<string, string> = {
-  critical: "Emergencies are always handled first.",
-  high: "Urgent electrical and plumbing faults are prioritised.",
-  medium: "Urgent faults in other categories.",
-  low: "Normal requests are scheduled in order.",
+  critical: "Emergency maintenance is handled immediately.",
+  high: "Priority maintenance gets prompt attention.",
+  medium: "Medium priority.",
+  low: "Routine maintenance is handled during regular maintenance.",
 };
 
 function UrgencyPicker({ value, onChange, name }: { value: string; onChange: (v: string) => void; name: string }) {
@@ -71,6 +73,7 @@ function UrgencyPicker({ value, onChange, name }: { value: string; onChange: (v:
               {u.label}
             </span>
             <span className="mt-0.5 hidden text-xs text-muted sm:block">{u.hint}</span>
+            <span className="mt-2 block text-xs font-medium capitalize text-ink-2">Priority: {u.priority}</span>
           </label>
         );
       })}
@@ -162,7 +165,7 @@ export default function StudentDashboard() {
         photoURL = await getDownloadURL(storageRef);
       }
 
-      const priority = calcPriority(category, urgency);
+      const priority = calcPriority(urgency);
 
       await addDoc(collection(db, "fault_reports"), {
         title,
@@ -231,7 +234,7 @@ export default function StudentDashboard() {
         title: editTitle.trim(),
         category: editCategory,
         urgency: editUrgency,
-        priority: calcPriority(editCategory, editUrgency),
+        priority: calcPriority(editUrgency),
         description: editDescription.trim(),
         photoURL,
         updatedAt: serverTimestamp(),
@@ -287,7 +290,7 @@ export default function StudentDashboard() {
   const displayName = userProfile?.name || user?.email || "Student";
   const firstName = (userProfile?.name || "").split(" ")[0] || "there";
   const location = `${userProfile?.dormitory || "General"} · Room ${userProfile?.roomNumber || "N/A"}`;
-  const preview = calcPriority(category, urgency);
+  const preview = calcPriority(urgency);
   const msgOk = successMsg.startsWith("✓");
   const msgText = successMsg.replace(/^(✓|❌)\s*/, "");
 
@@ -372,7 +375,7 @@ export default function StudentDashboard() {
                 </select>
               </Field>
 
-              <Field label="How urgent is it?">
+              <Field label="Maintenance classification">
                 <UrgencyPicker value={urgency} onChange={setUrgency} name="urgency" />
               </Field>
 
@@ -411,10 +414,9 @@ export default function StudentDashboard() {
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">How priority works</p>
               <ul className="mt-3 space-y-2.5 text-sm">
                 {[
-                  ["critical", "Any emergency"],
-                  ["high", "Urgent electrical or plumbing"],
-                  ["medium", "Urgent, other categories"],
-                  ["low", "Normal urgency"],
+                  ["critical", "Emergency Maintenance"],
+                  ["high", "Priority Maintenance"],
+                  ["low", "Routine Maintenance"],
                 ].map(([p, d]) => (
                   <li key={p} className="flex items-center justify-between gap-3">
                     <span className="text-ink-2">{d}</span>
@@ -563,11 +565,11 @@ export default function StudentDashboard() {
                       ))}
                     </select>
                   </Field>
-                  <Field label="Urgency">
+                  <Field label="Maintenance classification">
                     <UrgencyPicker value={editUrgency} onChange={setEditUrgency} name="edit-urgency" />
                   </Field>
                   <div className="flex items-center gap-2 text-sm text-muted">
-                    New priority: <PriorityBadge priority={calcPriority(editCategory, editUrgency)} />
+                    New priority: <PriorityBadge priority={calcPriority(editUrgency)} />
                   </div>
                   <Field label="Description" required htmlFor="edit-description">
                     <textarea

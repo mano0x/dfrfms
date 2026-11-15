@@ -15,10 +15,28 @@ export const CATEGORIES = [
   { value: "other", label: "Other" },
 ];
 
+// Maintenance classifications. The stored `urgency` values are unchanged
+// (normal / urgent / emergency) so existing reports and the database
+// structure stay the same; only the labels and priority mapping changed.
 export const URGENCIES = [
-  { value: "normal", label: "Normal", hint: "Can wait a few days" },
-  { value: "urgent", label: "Urgent", hint: "Needs attention soon" },
-  { value: "emergency", label: "Emergency", hint: "Safety risk or damage" },
+  {
+    value: "normal",
+    label: "Routine Maintenance",
+    hint: "Minor facility issues that can be handled during regular maintenance.",
+    priority: "low",
+  },
+  {
+    value: "urgent",
+    label: "Priority Maintenance",
+    hint: "Facility problems that require prompt maintenance attention.",
+    priority: "high",
+  },
+  {
+    value: "emergency",
+    label: "Emergency Maintenance",
+    hint: "Serious facility problems requiring immediate attention.",
+    priority: "critical",
+  },
 ];
 
 export const STATUSES = [
