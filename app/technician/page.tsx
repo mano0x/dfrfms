@@ -43,7 +43,7 @@ export default function TechnicianDashboard() {
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loading && (!user || role !== "technician")) router.push("/login");
+    if (!loading && (!user || role !== "technician")) router.push("/");
   }, [user, role, loading]);
 
   useEffect(() => {
@@ -132,7 +132,7 @@ export default function TechnicianDashboard() {
       role="technician"
       name={displayName}
       detail={userProfile?.specialization || undefined}
-      onSignOut={() => signOut(auth).then(() => router.push("/login"))}
+      onSignOut={() => signOut(auth).then(() => router.push("/"))}
     >
       <PageHeader
         title="Work queue"

@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { use, useEffect, useState } from "react";
+import Link from "next/link";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import { Alert, Brand, Field, Icon, Spinner, btn, cx, inputCls } from "@/components/ui";
+import { Alert, Brand, Field, Icon, ROLES, Spinner, btn, cx, inputCls, isRole } from "@/components/ui";
 
 const FEATURES = [
   {
@@ -24,12 +25,25 @@ const FEATURES = [
   },
 ];
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { role: roleParam } = use(searchParams);
+  const selectedRole = isRole(roleParam) ? roleParam : null;
+  const roleInfo = ROLES.find((r) => r.value === selectedRole);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  // The role must be chosen first on the home page.
+  useEffect(() => {
+    if (!selectedRole) router.replace("/");
+  }, [selectedRole, router]);
 
   const handleLogin = async () => {
     setError("");
@@ -37,18 +51,31 @@ export default function LoginPage() {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const snap = await getDoc(doc(db, "users", cred.user.uid));
-      if (!snap.exists()) throw new Error("User record not found.");
+      if (!snap.exists()) {
+        await signOut(auth);
+        setError("This account has no user profile yet. Ask your administrator to set it up.");
+        return;
+      }
 
       const role = snap.data().role;
-      if (role === "admin") router.push("/admin");
-      else if (role === "technician") router.push("/technician");
-      else router.push("/student");
+      if (role !== selectedRole) {
+        // Signed in with the wrong role selected: undo the sign-in.
+        await signOut(auth);
+        const actual = ROLES.find((r) => r.value === role)?.label.toLowerCase() ?? "different";
+        setError(`This is a ${actual} account, not a ${roleInfo?.label.toLowerCase()} account. Go back and choose the right role.`);
+        return;
+      }
+
+      router.push(`/${role}`);
     } catch {
       setError("Invalid email or password.");
     } finally {
       setLoading(false);
     }
   };
+
+  if (!roleInfo) return null;
+  const RoleIcon = roleInfo.icon;
 
   return (
     <div className="grid min-h-screen bg-bg lg:grid-cols-[1.05fr_1fr]">
@@ -106,8 +133,20 @@ export default function LoginPage() {
             <Brand size="lg" />
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Sign in</h1>
-          <p className="mt-1.5 text-sm text-muted">Use your campus account to open your dashboard.</p>
+          <Link href="/" className={cx(btn.ghost, "-ml-3 mb-6")}>
+            <span aria-hidden>←</span> Change role
+          </Link>
+
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand-soft text-brand-ink">
+              <RoleIcon width={22} height={22} />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand">{roleInfo.label}</p>
+              <h1 className="text-2xl font-bold tracking-tight text-ink">Sign in</h1>
+            </div>
+          </div>
+          <p className="mt-3 text-sm text-muted">{roleInfo.tagline}</p>
 
           <form
             className="mt-8 space-y-5"
@@ -154,7 +193,7 @@ export default function LoginPage() {
                   <Spinner /> Signing in…
                 </>
               ) : (
-                "Sign in"
+                `Sign in as ${roleInfo.label.toLowerCase()}`
               )}
             </button>
           </form>

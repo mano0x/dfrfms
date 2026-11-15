@@ -214,6 +214,40 @@ const ROLE_LABEL: Record<string, string> = {
   admin: "Administrator",
 };
 
+export type RoleKey = "student" | "technician" | "admin";
+
+export const ROLES: {
+  value: RoleKey;
+  label: string;
+  tagline: string;
+  points: string[];
+  icon: (p: IconProps) => ReactNode;
+}[] = [
+  {
+    value: "student",
+    label: "Student",
+    tagline: "Report a fault in your room and follow the repair.",
+    points: ["Submit fault reports with photos", "See priority and progress", "Edit reports until assigned"],
+    icon: Icon.Clipboard,
+  },
+  {
+    value: "technician",
+    label: "Technician",
+    tagline: "Work through your assigned maintenance jobs.",
+    points: ["View assigned and all reports", "Update job status", "Add resolution notes"],
+    icon: Icon.Wrench,
+  },
+  {
+    value: "admin",
+    label: "Administrator",
+    tagline: "Oversee every report and manage dormitory users.",
+    points: ["Search and filter all reports", "Assign technicians", "Create user accounts"],
+    icon: Icon.Shield,
+  },
+];
+
+export const isRole = (v: unknown): v is RoleKey => v === "student" || v === "technician" || v === "admin";
+
 export function AppShell({
   role,
   name,

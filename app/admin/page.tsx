@@ -68,7 +68,7 @@ export default function AdminDashboard() {
   const [createMsg, setCreateMsg] = useState("");
 
   useEffect(() => {
-    if (!loading && (!user || role !== "admin")) router.push("/login");
+    if (!loading && (!user || role !== "admin")) router.push("/");
   }, [user, role, loading]);
 
   useEffect(() => {
@@ -179,7 +179,7 @@ export default function AdminDashboard() {
       role="admin"
       name={user?.email || "Administrator"}
       detail="Administrator"
-      onSignOut={() => signOut(auth).then(() => router.push("/login"))}
+      onSignOut={() => signOut(auth).then(() => router.push("/"))}
     >
       <PageHeader
         title="Admin console"

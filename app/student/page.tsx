@@ -109,7 +109,7 @@ export default function StudentDashboard() {
   const [editPhoto, setEditPhoto] = useState<File | null>(null);
 
   useEffect(() => {
-    if (!loading && (!user || role !== "student")) router.push("/login");
+    if (!loading && (!user || role !== "student")) router.push("/");
   }, [user, role, loading]);
 
   useEffect(() => {
@@ -298,7 +298,7 @@ export default function StudentDashboard() {
       role="student"
       name={displayName}
       detail={location}
-      onSignOut={() => signOut(auth).then(() => router.push("/login"))}
+      onSignOut={() => signOut(auth).then(() => router.push("/"))}
     >
       <PageHeader
         title={`Hi, ${firstName}`}
