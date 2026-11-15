@@ -55,9 +55,7 @@ function UrgencyPicker({ value, onChange, name }: { value: string; onChange: (v:
             className={cx(
               "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition focus-within:ring-4 focus-within:ring-ring",
               on
-                ? u.value === "emergency"
-                  ? "border-red-500 bg-red-50 dark:bg-red-500/10"
-                  : "border-brand bg-brand-soft"
+                ? "border-ink bg-surface-2 ring-1 ring-inset ring-ink"
                 : "border-line bg-surface hover:border-line-strong"
             )}
           >
@@ -69,7 +67,7 @@ function UrgencyPicker({ value, onChange, name }: { value: string; onChange: (v:
               onChange={() => onChange(u.value)}
               className="sr-only"
             />
-            <span className={cx("block text-sm font-semibold", on ? (u.value === "emergency" ? "text-red-700 dark:text-red-300" : "text-brand-ink") : "text-ink")}>
+            <span className={cx("block text-sm font-semibold", "text-ink")}>
               {u.label}
             </span>
             <span className="mt-0.5 hidden text-xs text-muted sm:block">{u.hint}</span>

@@ -80,17 +80,16 @@ export default function LoginPage({
   return (
     <div className="grid min-h-screen bg-bg lg:grid-cols-[1.05fr_1fr]">
       {/* Brand panel */}
-      <aside className="relative hidden overflow-hidden bg-[#0f1b3d] p-12 text-white lg:flex lg:flex-col lg:justify-between">
+      <aside className="relative hidden overflow-hidden bg-[#0a0a0a] border-r border-white/10 p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          className="pointer-events-none absolute inset-0 opacity-[0.05]"
           style={{
             backgroundImage:
               "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
             backgroundSize: "40px 40px",
           }}
         />
-        <div aria-hidden className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-[#2f5bea] opacity-40 blur-3xl" />
 
         <div className="relative flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-xl bg-white/10 ring-1 ring-white/20">
@@ -106,7 +105,7 @@ export default function LoginPage({
           <h2 className="text-4xl font-bold leading-tight tracking-tight">
             Report it once.
             <br />
-            <span className="text-[#9db4ff]">Track it until it&apos;s fixed.</span>
+            <span className="text-white/50">Track it until it&apos;s fixed.</span>
           </h2>
           <ul className="mt-10 space-y-6">
             {FEATURES.map(({ icon: I, title, body }) => (

@@ -270,7 +270,7 @@ export default function TechnicianDashboard() {
                                 className={cx(
                                   "rounded-lg border px-2 py-2 text-xs font-semibold transition disabled:cursor-not-allowed",
                                   current
-                                    ? "border-brand bg-brand text-white"
+                                    ? "border-brand bg-brand text-on-brand"
                                     : "border-line bg-surface text-ink-2 hover:border-line-strong hover:bg-surface-2 disabled:opacity-50"
                                 )}
                               >
@@ -284,7 +284,7 @@ export default function TechnicianDashboard() {
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted">Resolution note</p>
                         {r.resolutionNote && (
-                          <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200">
+                          <div className="mt-2 rounded-lg border border-line-strong bg-surface-2 px-3.5 py-3 text-sm text-ink">
                             {r.resolutionNote}
                           </div>
                         )}

@@ -37,9 +37,9 @@ type UserRecord = {
 };
 
 const ROLE_TONE: Record<string, string> = {
-  admin: "bg-violet-50 text-violet-700 ring-violet-600/15 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/20",
-  technician: "bg-brand-soft text-brand-ink ring-brand/20",
-  student: "bg-surface-2 text-ink-2 ring-line-strong",
+  admin: "bg-ink text-on-brand ring-ink",
+  technician: "bg-surface-2 text-ink ring-line-strong",
+  student: "bg-transparent text-ink-2 ring-line",
 };
 
 const tableSelect =

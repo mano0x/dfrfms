@@ -53,7 +53,7 @@ export const selectCls = `ui-select ${inputCls}`;
 
 export const btn = {
   primary:
-    "inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
   secondary:
     "inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-medium text-ink-2 shadow-card transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-4 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
   ghost:
@@ -151,30 +151,34 @@ export const Icon = {
 /* Badges                                                              */
 /* ------------------------------------------------------------------ */
 
+// Monochrome: statuses differ by marker shape/shade, not colour.
 const STATUS_TONE: Record<string, string> = {
-  open: "bg-rose-50 text-rose-700 ring-rose-600/15 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-400/20",
-  "in-progress": "bg-amber-50 text-amber-800 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20",
-  resolved: "bg-emerald-50 text-emerald-700 ring-emerald-600/15 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20",
-  closed: "bg-slate-100 text-slate-600 ring-slate-500/15 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-400/20",
+  open: "bg-surface text-ink ring-ink/80",
+  "in-progress": "bg-surface text-ink ring-line-strong",
+  resolved: "bg-surface-2 text-ink-2 ring-line",
+  closed: "bg-transparent text-muted ring-line",
 };
-const STATUS_DOT: Record<string, string> = {
-  open: "bg-rose-500",
-  "in-progress": "bg-amber-500",
-  resolved: "bg-emerald-500",
-  closed: "bg-slate-400",
-};
+function StatusMarker({ status }: { status: string }) {
+  if (status === "resolved") return <Icon.Check width={12} height={12} strokeWidth={2.4} />;
+  const cls: Record<string, string> = {
+    open: "bg-ink",
+    "in-progress": "bg-ink/45",
+    closed: "border border-muted",
+  };
+  return <span className={cx("h-1.5 w-1.5 rounded-full", cls[status] ?? cls.closed)} />;
+}
 export const STATUS_BAR: Record<string, string> = {
-  open: "before:bg-rose-500",
-  "in-progress": "before:bg-amber-500",
-  resolved: "before:bg-emerald-500",
-  closed: "before:bg-slate-400",
+  open: "before:bg-ink",
+  "in-progress": "before:bg-ink/45",
+  resolved: "before:bg-ink/15",
+  closed: "before:bg-transparent",
 };
 
 const PRIORITY_TONE: Record<string, string> = {
-  critical: "bg-red-600 text-white ring-red-700/20",
-  high: "bg-orange-50 text-orange-700 ring-orange-600/20 dark:bg-orange-500/10 dark:text-orange-300 dark:ring-orange-400/25",
-  medium: "bg-yellow-50 text-yellow-800 ring-yellow-600/20 dark:bg-yellow-500/10 dark:text-yellow-300 dark:ring-yellow-400/25",
-  low: "bg-sky-50 text-sky-700 ring-sky-600/15 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-400/20",
+  critical: "bg-ink text-on-brand ring-ink font-semibold",
+  high: "bg-surface text-ink ring-ink/80 font-semibold",
+  medium: "bg-surface-2 text-ink-2 ring-line-strong",
+  low: "bg-transparent text-muted ring-line",
 };
 
 const pill = "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset";
@@ -182,7 +186,7 @@ const pill = "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px
 export function StatusBadge({ status }: { status: string }) {
   return (
     <span className={cx(pill, STATUS_TONE[status] ?? STATUS_TONE.closed)}>
-      <span className={cx("h-1.5 w-1.5 rounded-full", STATUS_DOT[status] ?? "bg-slate-400")} />
+      <StatusMarker status={status} />
       {statusLabel(status)}
     </span>
   );
@@ -285,7 +289,7 @@ export function AppShell({
               {detail && <p className="truncate text-xs text-muted">{detail}</p>}
             </div>
             <span
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-white"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-on-brand"
               aria-hidden
             >
               {initials}
@@ -306,7 +310,7 @@ export function Brand({ size = "md" }: { size?: "md" | "lg" }) {
   const lg = size === "lg";
   return (
     <div className="flex items-center gap-2.5">
-      <span className={cx("grid place-items-center rounded-xl bg-brand text-white shadow-card", lg ? "h-11 w-11" : "h-9 w-9")}>
+      <span className={cx("grid place-items-center rounded-xl bg-brand text-on-brand shadow-card", lg ? "h-11 w-11" : "h-9 w-9")}>
         <Icon.Logo width={lg ? 24 : 20} height={lg ? 24 : 20} strokeWidth={2} />
       </span>
       <div className="leading-tight">
@@ -338,10 +342,10 @@ export function Card({ className, children }: { className?: string; children: Re
 /* ------------------------------------------------------------------ */
 
 const STAT_TONE = {
-  brand: "bg-brand-soft text-brand-ink",
-  rose: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300",
-  amber: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300",
-  emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300",
+  brand: "bg-ink text-on-brand",
+  rose: "bg-surface-2 text-ink",
+  amber: "bg-surface-2 text-ink",
+  emerald: "bg-surface-2 text-ink",
 };
 
 export function StatGrid({
@@ -389,13 +393,13 @@ export function Tabs<T extends string>({
             onClick={() => onChange(t.value)}
             className={cx(
               "inline-flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-4 focus-visible:ring-ring",
-              on ? "bg-brand text-white shadow-card" : "text-muted hover:bg-surface-2 hover:text-ink"
+              on ? "bg-brand text-on-brand shadow-card" : "text-muted hover:bg-surface-2 hover:text-ink"
             )}
           >
             {t.icon}
             {t.label}
             {typeof t.count === "number" && (
-              <span className={cx("rounded-full px-1.5 text-xs tabular-nums", on ? "bg-white/20" : "bg-surface-2")}>{t.count}</span>
+              <span className={cx("rounded-full px-1.5 text-xs tabular-nums", on ? "bg-on-brand/20" : "bg-surface-2")}>{t.count}</span>
             )}
           </button>
         );
@@ -425,7 +429,7 @@ export function Field({
     <div>
       <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-ink-2">
         {label}
-        {required && <span className="ml-0.5 text-rose-500">*</span>}
+        {required && <span className="ml-0.5 text-muted">*</span>}
       </label>
       {children}
       {hint && <p className="mt-1.5 text-xs text-muted">{hint}</p>}
@@ -435,8 +439,8 @@ export function Field({
 
 export function Alert({ tone, children }: { tone: "error" | "success" | "info"; children: ReactNode }) {
   const t = {
-    error: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-300",
-    success: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300",
+    error: "border-ink/70 bg-surface text-ink font-medium",
+    success: "border-line-strong bg-surface-2 text-ink",
     info: "border-line bg-surface-2 text-ink-2",
   }[tone];
   const I = tone === "success" ? Icon.Check : Icon.Alert;

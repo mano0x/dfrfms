@@ -38,7 +38,7 @@ export default function HomePage() {
                 href={`/login?role=${value}`}
                 className="group flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-card transition hover:-translate-y-0.5 hover:border-brand hover:shadow-pop focus:outline-none focus-visible:ring-4 focus-visible:ring-ring"
               >
-                <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand-soft text-brand-ink transition group-hover:bg-brand group-hover:text-white">
+                <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand-soft text-brand-ink transition group-hover:bg-brand group-hover:text-on-brand">
                   <I width={22} height={22} />
                 </span>
                 <h2 className="mt-5 text-lg font-semibold text-ink">{label}</h2>
@@ -46,7 +46,7 @@ export default function HomePage() {
                 <ul className="mt-5 space-y-2 text-sm text-ink-2">
                   {points.map((p) => (
                     <li key={p} className="flex items-start gap-2">
-                      <Icon.Check width={16} height={16} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <Icon.Check width={16} height={16} className="mt-0.5 shrink-0 text-ink" />
                       {p}
                     </li>
                   ))}
