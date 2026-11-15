@@ -1,15 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
+import { signOut, createUserWithEmailAndPassword } from "firebase/auth";
 import {
-  collection, getDocs, updateDoc, doc, query, orderBy, addDoc, serverTimestamp
+  collection, getDocs, updateDoc, doc, query, orderBy, setDoc, serverTimestamp
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { auth, db, getAccountCreationAuth } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import {
   Alert, AppShell, Card, Field, Icon, LoadingScreen, PRIORITIES, PageHeader, PriorityBadge,
-  STATUSES, StatGrid, StatusBadge, Tabs, btn, cx, inputCls, selectCls,
+  STATUSES, Spinner, StatGrid, StatusBadge, Tabs, btn, cx, inputCls, selectCls,
 } from "@/components/ui";
 
 type Report = {
@@ -63,6 +63,8 @@ export default function AdminDashboard() {
   const [newDorm, setNewDorm] = useState("");
   const [newRoom, setNewRoom] = useState("");
   const [newSpec, setNewSpec] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState("");
 
   useEffect(() => {
@@ -101,19 +103,49 @@ export default function AdminDashboard() {
   };
 
   const handleCreateUser = async () => {
-    if (!newName || !newEmail) { setCreateMsg("Name and email are required."); return; }
-    await addDoc(collection(db, "users"), {
-      name: newName,
-      email: newEmail,
-      role: newRole,
-      dormitory: newDorm || null,
-      roomNumber: newRoom || null,
-      specialization: newSpec || null,
-      createdAt: serverTimestamp(),
-    });
-    setCreateMsg(`✓ User "${newName}" created successfully.`);
-    setNewName(""); setNewEmail(""); setNewDorm(""); setNewRoom(""); setNewSpec("");
-    fetchData();
+    const name = newName.trim();
+    const email = newEmail.trim().toLowerCase();
+    if (!name || !email) { setCreateMsg("Name and email are required."); return; }
+    if (newPassword.length < 6) { setCreateMsg("The starting password must be at least 6 characters."); return; }
+
+    setCreating(true);
+    setCreateMsg("");
+    const creationAuth = getAccountCreationAuth();
+    try {
+      // 1. Create the sign-in account on a separate auth instance so the
+      //    admin stays signed in.
+      const cred = await createUserWithEmailAndPassword(creationAuth, email, newPassword);
+
+      // 2. Save the profile under the account's UID — this is the document
+      //    the login page and AuthContext read to find the user's role.
+      //    Written with the admin's own session, as required by the rules.
+      await setDoc(doc(db, "users", cred.user.uid), {
+        name,
+        email,
+        role: newRole,
+        dormitory: newRole === "student" ? newDorm || null : null,
+        roomNumber: newRole === "student" ? newRoom || null : null,
+        specialization: newRole === "technician" ? newSpec || null : null,
+        createdAt: serverTimestamp(),
+      });
+
+      setCreateMsg(`✓ User "${name}" created. They can now sign in with ${email}.`);
+      setNewName(""); setNewEmail(""); setNewDorm(""); setNewRoom(""); setNewSpec(""); setNewPassword("");
+      fetchData();
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      setCreateMsg(
+        code === "auth/email-already-in-use" ? "An account with this email already exists." :
+        code === "auth/invalid-email" ? "That email address is not valid." :
+        code === "auth/weak-password" ? "The starting password is too weak (at least 6 characters)." :
+        code === "auth/operation-not-allowed" ? "Email/password sign-in is not enabled in Firebase Authentication." :
+        code === "permission-denied" ? "The account was created, but saving the profile was blocked by the security rules." :
+        "Could not create the user. Please try again."
+      );
+    } finally {
+      await signOut(creationAuth).catch(() => {});
+      setCreating(false);
+    }
   };
 
   const technicians = users.filter((u) => u.role === "technician");
@@ -368,6 +400,17 @@ export default function AdminDashboard() {
               <Field label="Email" required htmlFor="new-email">
                 <input id="new-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className={inputCls} placeholder="user@example.com" />
               </Field>
+              <Field label="Starting password" required htmlFor="new-password" hint="At least 6 characters. Share it with the user privately.">
+                <input
+                  id="new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className={inputCls}
+                  placeholder="••••••••"
+                />
+              </Field>
               {newRole === "student" && (
                 <div className="grid gap-5 sm:grid-cols-2">
                   <Field label="Dormitory" htmlFor="new-dorm">
@@ -388,8 +431,8 @@ export default function AdminDashboard() {
                   {createMsg.replace(/^✓\s*/, "")}
                 </Alert>
               )}
-              <button type="submit" className={cx(btn.primary, "w-full py-3")}>
-                <Icon.UserPlus width={16} height={16} /> Create user
+              <button type="submit" disabled={creating} className={cx(btn.primary, "w-full py-3")}>
+                {creating ? (<><Spinner /> Creating…</>) : (<><Icon.UserPlus width={16} height={16} /> Create user</>)}
               </button>
             </form>
           </Card>
@@ -399,8 +442,9 @@ export default function AdminDashboard() {
               <p className="text-sm font-semibold">About user profiles</p>
             </div>
             <p className="mt-2 text-sm leading-6 text-muted">
-              This saves a profile with the person&apos;s role and details. Sign-in accounts (email and password)
-              are managed separately in Firebase Authentication.
+              This creates the person&apos;s sign-in account (email and starting password) in Firebase
+              Authentication and saves their profile under the same account ID. The role decides which
+              dashboard they see after signing in.
             </p>
           </Card>
         </div>

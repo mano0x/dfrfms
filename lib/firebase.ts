@@ -20,4 +20,14 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// A second Firebase app instance used only by admins to create sign-in
+// accounts. Creating a user on the main `auth` would sign the admin out and
+// sign in as the new user; doing it on this separate instance avoids that.
+export function getAccountCreationAuth() {
+  const name = "account-creation";
+  const secondary = getApps().find((a) => a.name === name) ?? initializeApp(firebaseConfig, name);
+  return getAuth(secondary);
+}
+
 export default app;
