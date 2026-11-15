@@ -6,7 +6,7 @@ import { AuthProvider } from "@/lib/AuthContext";
 const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "DFRFMS - Dormitory Fault Reporting & Facility Management System",
+  title: "DFRMMS - Dormitory Fault Reporting and Maintenance Management System",
   description: "Fault reporting and maintenance management for dormitories",
 };
 

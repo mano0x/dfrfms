@@ -62,7 +62,7 @@ export default function HomePage() {
       </main>
 
       <footer className="px-4 pb-8 text-center text-xs text-muted">
-        Dormitory Fault Reporting &amp; Facility Management System
+        Dormitory Fault Reporting and Maintenance Management System
       </footer>
     </div>
   );

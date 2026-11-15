@@ -84,7 +84,7 @@ export default function LoginPage({
         <div className="mx-auto w-full max-w-md lg:mx-0">
           <Icon.Logo width={28} height={28} className="hidden text-ink lg:block" />
           <h2 className="text-lg lg:mt-4 lg:text-xl font-semibold leading-snug text-ink">
-            Dormitory Fault Reporting and Facility Management System
+            Dormitory Fault Reporting and Maintenance Management System
           </h2>
           <p className="mt-3 text-sm leading-6">
             Students can report problems in their dormitory rooms and follow the repair progress online.

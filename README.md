@@ -1,12 +1,12 @@
-# DFRFMS
+# DFRMMS
 
-Dormitory Fault Reporting & Facility Management System is a role-based web app for reporting dormitory issues, tracking repairs, and coordinating work between students, technicians, and administrators.
+Dormitory Fault Reporting and Maintenance Management System (DFRMMS) is a role-based web app for reporting dormitory issues, tracking repairs, and coordinating work between students, technicians, and administrators.
 
 The app is built with Next.js App Router, React, TypeScript, Tailwind CSS, and Firebase. Authentication, database reads/writes, and file uploads are handled by Firebase services directly from the client.
 
 ## What This App Does
 
-DFRFMS lets students submit fault reports, technicians work through assigned and unassigned issues, and admins manage the overall workflow. The core idea is simple: a problem is reported once, then tracked until it is resolved.
+DFRMMS lets students submit fault reports, technicians work through assigned and unassigned issues, and admins manage the overall workflow. The core idea is simple: a problem is reported once, then tracked until it is resolved.
 
 ## Main Roles
 
@@ -293,4 +293,4 @@ When adding new features, keep the role-based structure consistent:
 
 ## Summary
 
-DFRFMS is a Firebase-backed dormitory maintenance system with three main experiences: students report issues, technicians resolve them, and admins coordinate the overall workflow. The current codebase focuses on a simple and direct client-side architecture backed by Firebase services.
+DFRMMS is a Firebase-backed dormitory maintenance system with three main experiences: students report issues, technicians resolve them, and admins coordinate the overall workflow. The current codebase focuses on a simple and direct client-side architecture backed by Firebase services.

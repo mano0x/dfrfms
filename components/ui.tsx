@@ -332,8 +332,8 @@ export function Brand({ size = "md" }: { size?: "md" | "lg" }) {
         <Icon.Logo width={lg ? 24 : 20} height={lg ? 24 : 20} strokeWidth={2} />
       </span>
       <div className="leading-tight">
-        <p className={cx("font-bold tracking-tight text-ink", lg ? "text-xl" : "text-base")}>DFRFMS</p>
-        <p className={cx("text-muted", lg ? "text-sm" : "hidden text-[11px] lg:block")}>Dormitory Facility Management</p>
+        <p className={cx("font-bold tracking-tight text-ink", lg ? "text-xl" : "text-base")}>DFRMMS</p>
+        <p className={cx("text-muted", lg ? "text-sm" : "hidden text-[11px] lg:block")}>Dormitory Maintenance Management</p>
       </div>
     </div>
   );
