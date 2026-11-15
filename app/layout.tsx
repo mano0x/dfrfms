@@ -16,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={geist.className}>
+    <html lang="en" className={geist.className}>
+      <body>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

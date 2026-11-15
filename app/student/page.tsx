@@ -8,6 +8,11 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { auth, db, storage } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
+import {
+  Alert, AppShell, CATEGORIES, Card, Detail, EmptyState, Field, FilePicker, Icon,
+  LoadingScreen, PageHeader, PriorityBadge, STATUSES, STATUS_BAR, Spinner, StatGrid,
+  StatusBadge, Tabs, Tag, URGENCIES, btn, categoryLabel, cx, inputCls, selectCls,
+} from "@/components/ui";
 
 type Report = {
   id: string;
@@ -26,24 +31,53 @@ type Report = {
   photoURL?: string;
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  open: "bg-red-500/20 text-red-400 border border-red-500/30",
-  "in-progress": "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
-  resolved: "bg-green-500/20 text-green-400 border border-green-500/30",
-  closed: "bg-gray-500/20 text-gray-400 border border-gray-500/30",
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  critical: "bg-red-600/20 text-red-300 border border-red-600/30",
-  high: "bg-orange-500/20 text-orange-300 border border-orange-500/30",
-  medium: "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30",
-  low: "bg-blue-500/20 text-blue-300 border border-blue-500/30",
-};
-
 function calcPriority(category: string, urgency: string): string {
   if (urgency === "emergency") return "critical";
   if (urgency === "urgent") return category === "electrical" || category === "plumbing" ? "high" : "medium";
   return "low";
+}
+
+const PRIORITY_EXPLAINER: Record<string, string> = {
+  critical: "Emergencies are always handled first.",
+  high: "Urgent electrical and plumbing faults are prioritised.",
+  medium: "Urgent faults in other categories.",
+  low: "Normal requests are scheduled in order.",
+};
+
+function UrgencyPicker({ value, onChange, name }: { value: string; onChange: (v: string) => void; name: string }) {
+  return (
+    <div role="radiogroup" className="grid grid-cols-3 gap-2">
+      {URGENCIES.map((u) => {
+        const on = value === u.value;
+        return (
+          <label
+            key={u.value}
+            className={cx(
+              "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition focus-within:ring-4 focus-within:ring-ring",
+              on
+                ? u.value === "emergency"
+                  ? "border-red-500 bg-red-50 dark:bg-red-500/10"
+                  : "border-brand bg-brand-soft"
+                : "border-line bg-surface hover:border-line-strong"
+            )}
+          >
+            <input
+              type="radio"
+              name={name}
+              value={u.value}
+              checked={on}
+              onChange={() => onChange(u.value)}
+              className="sr-only"
+            />
+            <span className={cx("block text-sm font-semibold", on ? (u.value === "emergency" ? "text-red-700 dark:text-red-300" : "text-brand-ink") : "text-ink")}>
+              {u.label}
+            </span>
+            <span className="mt-0.5 hidden text-xs text-muted sm:block">{u.hint}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function StudentDashboard() {
@@ -95,13 +129,13 @@ export default function StudentDashboard() {
 
       // 2. Fetch reports with a simple single-field query (NO complex index needed!)
       const simpleQuery = query(
-        collection(db, "fault_reports"), 
+        collection(db, "fault_reports"),
         where("studentId", "==", user!.uid)
       );
-      
+
       const rSnap = await getDocs(simpleQuery);
       const fetchedReports = rSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Report));
-      
+
       // 3. Sort purely inside the browser's JavaScript memory
       fetchedReports.sort((a, b) => {
         const timeA = a.createdAt?.seconds || 0;
@@ -240,253 +274,242 @@ export default function StudentDashboard() {
     resolved: reports.filter((r) => r.status === "resolved").length,
   };
 
+  // Close the details dialog with Escape
+  useEffect(() => {
+    if (!selectedReport) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setSelectedReport(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedReport]);
+
   if (loading || dataLoading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-2">
-        <p className="text-gray-400 text-sm">Loading Student Workspace...</p>
-        <span className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
-      </div>
-    );
+    return <LoadingScreen label="Loading your reports…" />;
   }
 
+  const displayName = userProfile?.name || user?.email || "Student";
+  const firstName = (userProfile?.name || "").split(" ")[0] || "there";
+  const location = `${userProfile?.dormitory || "General"} · Room ${userProfile?.roomNumber || "N/A"}`;
+  const preview = calcPriority(category, urgency);
+  const msgOk = successMsg.startsWith("✓");
+  const msgText = successMsg.replace(/^(✓|❌)\s*/, "");
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-gray-900 to-gray-900/80 border-b border-gray-800/50 backdrop-blur px-6 py-5 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-white">DFRFMS</h1>
-            <p className="text-xs text-gray-400 mt-1">
-              Student · {userProfile?.name || user?.email} • {userProfile?.dormitory || "General"} / Room {userProfile?.roomNumber || "N/A"}
-            </p>
-          </div>
-          <button
-            onClick={() => signOut(auth).then(() => router.push("/login"))}
-            className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition"
-          >
-            Sign Out
-          </button>
-        </div>
-      </header>
-
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        {fetchError && (
-          <div className="mb-6 bg-red-500/10 border border-red-500/20 text-red-300 text-xs p-4 rounded-lg">
-            {fetchError}
-          </div>
-        )}
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-          {[
-            { label: "My Reports", value: stats.total, color: "from-blue-600 to-cyan-600", icon: "📋" },
-            { label: "Open", value: stats.open, color: "from-red-600 to-orange-600", icon: "🔴" },
-            { label: "In Progress", value: stats.inProgress, color: "from-yellow-600 to-amber-600", icon: "⏳" },
-            { label: "Resolved", value: stats.resolved, color: "from-green-600 to-emerald-600", icon: "✓" },
-          ].map((s) => (
-            <div key={s.label} className={`bg-gradient-to-br ${s.color} rounded-lg p-4 shadow-lg hover:shadow-xl transition`}>
-              <p className="text-white/80 text-xs font-medium mb-2">{s.label}</p>
-              <div className="flex items-end justify-between">
-                <p className="text-3xl font-bold text-white">{s.value}</p>
-                <span className="text-2xl">{s.icon}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-gray-800">
-          {(["submit", "history"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 ${
-                activeTab === tab
-                  ? "border-blue-500 text-blue-400"
-                  : "border-transparent text-gray-400 hover:text-gray-300"
-              }`}
-            >
-              {tab === "submit" ? "Submit Report" : "My Reports"}
+    <AppShell
+      role="student"
+      name={displayName}
+      detail={location}
+      onSignOut={() => signOut(auth).then(() => router.push("/login"))}
+    >
+      <PageHeader
+        title={`Hi, ${firstName}`}
+        subtitle={
+          <span className="inline-flex items-center gap-1.5">
+            <Icon.Pin width={14} height={14} /> {location}
+          </span>
+        }
+        action={
+          activeTab === "history" && (
+            <button className={btn.primary} onClick={() => setActiveTab("submit")}>
+              <Icon.Plus width={16} height={16} /> New report
             </button>
-          ))}
-        </div>
+          )
+        }
+      />
 
-        {/* Submit Tab */}
-        {activeTab === "submit" && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-6">New Fault Report</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-gray-300 font-medium block mb-2">Title *</label>
+      {fetchError && (
+        <div className="mb-6">
+          <Alert tone="error">{fetchError}</Alert>
+        </div>
+      )}
+
+      <StatGrid
+        items={[
+          { label: "My reports", value: stats.total, tone: "brand", icon: <Icon.Clipboard width={16} height={16} /> },
+          { label: "Open", value: stats.open, tone: "rose", icon: <Icon.Alert width={16} height={16} /> },
+          { label: "In progress", value: stats.inProgress, tone: "amber", icon: <Icon.Clock width={16} height={16} /> },
+          { label: "Resolved", value: stats.resolved, tone: "emerald", icon: <Icon.Check width={16} height={16} /> },
+        ]}
+      />
+
+      <div className="mb-6">
+        <Tabs
+          active={activeTab}
+          onChange={setActiveTab}
+          tabs={[
+            { value: "submit", label: "Report a fault", icon: <Icon.Plus width={16} height={16} /> },
+            { value: "history", label: "My reports", icon: <Icon.Clipboard width={16} height={16} />, count: reports.length },
+          ]}
+        />
+      </div>
+
+      {/* Submit */}
+      {activeTab === "submit" && (
+        <div className="ui-fade-up grid gap-6 lg:grid-cols-[1fr_320px]">
+          <Card className="p-5 sm:p-7">
+            <h2 className="text-lg font-semibold text-ink">New fault report</h2>
+            <p className="mt-1 text-sm text-muted">Tell us what&apos;s wrong. Your room details are added automatically.</p>
+
+            <form
+              className="mt-6 space-y-5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSubmit();
+              }}
+            >
+              <Field label="Title" required htmlFor="title">
                 <input
+                  id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Broken light switch in bathroom"
-                  className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition"
+                  className={inputCls}
                 />
-              </div>
+              </Field>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-gray-300 font-medium block mb-2">Category</label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition"
-                  >
-                    <option value="electrical">Electrical</option>
-                    <option value="plumbing">Plumbing</option>
-                    <option value="hvac">HVAC / Heating</option>
-                    <option value="structural">Structural</option>
-                    <option value="internet">Internet / Network</option>
-                    <option value="furniture">Furniture</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-300 font-medium block mb-2">Urgency</label>
-                  <select
-                    value={urgency}
-                    onChange={(e) => setUrgency(e.target.value)}
-                    className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition"
-                  >
-                    <option value="normal">Normal</option>
-                    <option value="urgent">Urgent</option>
-                    <option value="emergency">Emergency</option>
-                  </select>
-                </div>
-              </div>
+              <Field label="Category" htmlFor="category">
+                <select id="category" value={category} onChange={(e) => setCategory(e.target.value)} className={selectCls}>
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </Field>
 
-              <div>
-                <label className="text-sm text-gray-300 font-medium block mb-2">Description *</label>
+              <Field label="How urgent is it?">
+                <UrgencyPicker value={urgency} onChange={setUrgency} name="urgency" />
+              </Field>
+
+              <Field label="Description" required htmlFor="description">
                 <textarea
+                  id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={4}
-                  placeholder="Describe the issue in detail..."
-                  className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 resize-none transition"
+                  placeholder="Where exactly is the problem, when did it start, is anything damaged?"
+                  className={cx(inputCls, "resize-y")}
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="text-sm text-gray-300 font-medium block mb-2">Photo (optional)</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setPhoto(e.target.files?.[0] || null)}
-                  className="w-full bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-3 text-gray-300 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 file:mr-3 file:bg-blue-600 file:text-white file:border-0 file:rounded file:px-4 file:py-2 file:text-xs file:font-medium hover:file:bg-blue-700 transition cursor-pointer"
-                />
-              </div>
+              <Field label="Photo">
+                <FilePicker file={photo} onChange={setPhoto} />
+              </Field>
 
-              {/* Priority preview */}
-              <div className="bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/20 rounded-lg px-4 py-3 flex items-center justify-between">
-                <span className="text-sm text-gray-300 font-medium">Calculated Priority</span>
-                <span className={`text-xs px-3 py-1 rounded-full capitalize font-semibold ${PRIORITY_COLORS[calcPriority(category, urgency)]}`}>
-                  {calcPriority(category, urgency)}
-                </span>
-              </div>
+              {successMsg && <Alert tone={msgOk ? "success" : "error"}>{msgText}</Alert>}
 
-              {successMsg && (
-                <p className={`text-sm font-medium ${successMsg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
-                  {successMsg}
-                </p>
-              )}
-
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition duration-200 shadow-lg hover:shadow-xl"
-              >
-                {submitting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    Submitting...
-                  </span>
-                ) : (
-                  "Submit Report"
-                )}
+              <button type="submit" disabled={submitting} className={cx(btn.primary, "w-full py-3")}>
+                {submitting ? (<><Spinner /> Submitting…</>) : "Submit report"}
               </button>
-            </div>
-          </div>
-        )}
+            </form>
+          </Card>
 
-        {/* History Tab */}
-        {activeTab === "history" && (
-          <div>
-            <div className="mb-4 flex gap-2">
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="bg-gray-800/50 border border-gray-700 hover:border-gray-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-              >
-                <option value="all">All Statuses</option>
-                <option value="open">Open</option>
-                <option value="in-progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-                <option value="closed">Closed</option>
-              </select>
-            </div>
-
-            {filtered.length === 0 ? (
-              <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-12 text-center">
-                <p className="text-gray-400">No reports yet.</p>
-                <button
-                  onClick={() => setActiveTab("submit")}
-                  className="mt-4 text-blue-400 hover:text-blue-300 text-sm font-medium transition"
-                >
-                  Submit your first report →
-                </button>
+          <aside className="space-y-4">
+            <Card className="p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Calculated priority</p>
+              <div className="mt-3 flex items-center gap-3">
+                <PriorityBadge priority={preview} />
               </div>
-            ) : (
-              <div className="space-y-3">
-                {filtered.map((r) => (
+              <p className="mt-3 text-sm text-ink-2">{PRIORITY_EXPLAINER[preview]}</p>
+            </Card>
+            <Card className="p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">How priority works</p>
+              <ul className="mt-3 space-y-2.5 text-sm">
+                {[
+                  ["critical", "Any emergency"],
+                  ["high", "Urgent electrical or plumbing"],
+                  ["medium", "Urgent, other categories"],
+                  ["low", "Normal urgency"],
+                ].map(([p, d]) => (
+                  <li key={p} className="flex items-center justify-between gap-3">
+                    <span className="text-ink-2">{d}</span>
+                    <PriorityBadge priority={p} />
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </aside>
+        </div>
+      )}
+
+      {/* History */}
+      {activeTab === "history" && (
+        <div className="ui-fade-up">
+          <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter by status">
+            {[{ value: "all", label: "All" }, ...STATUSES].map((s) => {
+              const on = filterStatus === s.value;
+              const n = s.value === "all" ? reports.length : reports.filter((r) => r.status === s.value).length;
+              return (
+                <button
+                  key={s.value}
+                  onClick={() => setFilterStatus(s.value)}
+                  aria-pressed={on}
+                  className={cx(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition",
+                    on ? "border-brand bg-brand-soft text-brand-ink" : "border-line bg-surface text-muted hover:text-ink"
+                  )}
+                >
+                  {s.label}
+                  <span className="tabular-nums opacity-70">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {filtered.length === 0 ? (
+            <EmptyState
+              title={reports.length === 0 ? "No reports yet" : "Nothing matches this filter"}
+              body={reports.length === 0 ? "When something in your room breaks, report it here and follow its progress." : "Try a different status."}
+              action={
+                reports.length === 0 && (
+                  <button onClick={() => setActiveTab("submit")} className={btn.primary}>
+                    <Icon.Plus width={16} height={16} /> Submit your first report
+                  </button>
+                )
+              }
+            />
+          ) : (
+            <ul className="space-y-3">
+              {filtered.map((r) => (
+                <li key={r.id}>
                   <button
-                    key={r.id}
                     type="button"
                     onClick={() => openReport(r)}
-                    className="w-full text-left bg-gray-900/50 border border-gray-800 hover:border-blue-500/50 rounded-xl p-5 transition group focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    className={cx(
+                      "group relative flex w-full gap-4 overflow-hidden rounded-xl border border-line bg-surface p-4 pl-5 text-left shadow-card transition hover:border-line-strong hover:shadow-pop focus:outline-none focus-visible:ring-4 focus-visible:ring-ring sm:p-5 sm:pl-6",
+                      "before:absolute before:inset-y-0 before:left-0 before:w-1",
+                      STATUS_BAR[r.status]
+                    )}
                     aria-label={`View details for ${r.title}`}
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-white group-hover:text-blue-300 transition">{r.title}</h3>
-                        <p className="text-gray-400 text-sm mt-1">{r.description}</p>
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          <span className="text-xs text-gray-400 bg-gray-800 px-2.5 py-1 rounded-md font-medium">
-                            {r.category}
-                          </span>
-                          <span className={`text-xs px-2.5 py-1 rounded-md font-semibold ${PRIORITY_COLORS[r.priority] || ""}`}>
-                            {r.priority}
-                          </span>
-                        </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold text-ink group-hover:text-brand">{r.title}</h3>
+                        <StatusBadge status={r.status} />
                       </div>
-                      <div className="text-right shrink-0">
-                        <span className={`text-xs px-2.5 py-1 rounded-md font-semibold block ${STATUS_COLORS[r.status] || ""}`}>
-                          {r.status}
-                        </span>
-                        <p className="text-gray-500 text-xs mt-2">
-                          {r.createdAt?.toDate?.()?.toLocaleDateString() || "—"}
-                        </p>
+                      <p className="mt-1 line-clamp-2 text-sm text-muted">{r.description}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+                        <Tag>{categoryLabel(r.category)}</Tag>
+                        <PriorityBadge priority={r.priority} />
+                        <span className="ml-auto">{r.createdAt?.toDate?.()?.toLocaleDateString() || "—"}</span>
                       </div>
                     </div>
                     {r.photoURL && (
                       <img
                         src={r.photoURL}
-                        alt="fault photo"
-                        className="mt-4 rounded-lg max-h-48 object-cover border border-gray-700"
+                        alt=""
+                        className="hidden h-20 w-20 shrink-0 rounded-lg border border-line object-cover sm:block"
                       />
                     )}
                   </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
+      {/* Details dialog */}
       {selectedReport && (
         <div
-          className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4"
           role="presentation"
           onClick={() => setSelectedReport(null)}
         >
@@ -494,185 +517,146 @@ export default function StudentDashboard() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="report-details-title"
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-2xl"
+            className="ui-fade-up max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-line bg-surface shadow-pop sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Report details</p>
-                <h2 id="report-details-title" className="mt-1 text-xl font-bold text-white">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-surface px-5 py-4 sm:px-6">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {editing ? "Edit report" : "Report details"}
+                </p>
+                <h2 id="report-details-title" className="mt-1 truncate text-lg font-bold text-ink">
                   {selectedReport.title}
                 </h2>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedReport(null)}
-                className="rounded-lg px-2 py-1 text-xl text-gray-400 hover:bg-gray-800 hover:text-white"
-                aria-label="Close report details"
-              >
-                ×
-              </button>
-            </div>
-
-            {canEditReport(selectedReport) && !editing && (
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                Edit report
-              </button>
-            )}
-
-            {editing ? (
-              <div className="mt-6 space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">Title *</label>
-                  <input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-white focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-gray-300">Category</label>
-                    <select
-                      value={editCategory}
-                      onChange={(e) => setEditCategory(e.target.value)}
-                      className="w-full rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-white focus:border-blue-500 focus:outline-none"
-                    >
-                      <option value="electrical">Electrical</option>
-                      <option value="plumbing">Plumbing</option>
-                      <option value="hvac">HVAC / Heating</option>
-                      <option value="structural">Structural</option>
-                      <option value="internet">Internet / Network</option>
-                      <option value="furniture">Furniture</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-gray-300">Urgency</label>
-                    <select
-                      value={editUrgency}
-                      onChange={(e) => setEditUrgency(e.target.value)}
-                      className="w-full rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-white focus:border-blue-500 focus:outline-none"
-                    >
-                      <option value="normal">Normal</option>
-                      <option value="urgent">Urgent</option>
-                      <option value="emergency">Emergency</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">Description *</label>
-                  <textarea
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    rows={5}
-                    className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-white focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">Replace photograph</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setEditPhoto(e.target.files?.[0] || null)}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3 text-sm text-gray-300"
-                  />
-                </div>
-                {editError && <p className="text-sm text-red-400">{editError}</p>}
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => { setEditing(false); setEditError(""); }}
-                    className="rounded-lg px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800"
-                    disabled={savingEdit}
-                  >
-                    Cancel
+              <div className="flex shrink-0 items-center gap-1">
+                {canEditReport(selectedReport) && !editing && (
+                  <button type="button" onClick={() => setEditing(true)} className={btn.secondary}>
+                    <Icon.Edit width={16} height={16} /> Edit
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleEditSave}
-                    disabled={savingEdit}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {savingEdit ? "Saving..." : "Save changes"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="text-xs text-gray-500">Report ID</p>
-                <p className="mt-1 break-all text-sm text-gray-200">{selectedReport.id}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Submitted</p>
-                <p className="mt-1 text-sm text-gray-200">
-                  {selectedReport.createdAt?.toDate?.()?.toLocaleString() || "—"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Category</p>
-                <p className="mt-1 capitalize text-sm text-gray-200">{selectedReport.category}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Priority</p>
-                <span className={`mt-1 inline-block rounded-md px-2.5 py-1 text-xs font-semibold ${PRIORITY_COLORS[selectedReport.priority] || ""}`}>
-                  {selectedReport.priority}
-                </span>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Status</p>
-                <span className={`mt-1 inline-block rounded-md px-2.5 py-1 text-xs font-semibold ${STATUS_COLORS[selectedReport.status] || ""}`}>
-                  {selectedReport.status}
-                </span>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Assigned technician</p>
-                <p className="mt-1 text-sm text-gray-200">{selectedReport.assignedTo || "Not assigned"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Location</p>
-                <p className="mt-1 text-sm text-gray-200">
-                  {selectedReport.dormitory || "—"} / Room {selectedReport.roomNumber || "—"}
-                </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedReport(null)}
+                  className={btn.ghost}
+                  aria-label="Close report details"
+                >
+                  <Icon.X />
+                </button>
               </div>
             </div>
 
-            <div className="mt-6">
-              <p className="text-xs text-gray-500">Description</p>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-200">{selectedReport.description}</p>
-            </div>
+            <div className="px-5 py-5 sm:px-6">
+              {editing ? (
+                <form
+                  className="space-y-5"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleEditSave();
+                  }}
+                >
+                  <Field label="Title" required htmlFor="edit-title">
+                    <input id="edit-title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label="Category" htmlFor="edit-category">
+                    <select id="edit-category" value={editCategory} onChange={(e) => setEditCategory(e.target.value)} className={selectCls}>
+                      {CATEGORIES.map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Urgency">
+                    <UrgencyPicker value={editUrgency} onChange={setEditUrgency} name="edit-urgency" />
+                  </Field>
+                  <div className="flex items-center gap-2 text-sm text-muted">
+                    New priority: <PriorityBadge priority={calcPriority(editCategory, editUrgency)} />
+                  </div>
+                  <Field label="Description" required htmlFor="edit-description">
+                    <textarea
+                      id="edit-description"
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      rows={5}
+                      className={cx(inputCls, "resize-y")}
+                    />
+                  </Field>
+                  <Field label="Replace photo">
+                    <FilePicker file={editPhoto} onChange={setEditPhoto} label="Choose a new photo" />
+                  </Field>
+                  {editError && <Alert tone="error">{editError}</Alert>}
+                  <div className="flex justify-end gap-3 border-t border-line pt-5">
+                    <button
+                      type="button"
+                      onClick={() => { setEditing(false); setEditError(""); }}
+                      className={btn.secondary}
+                      disabled={savingEdit}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" disabled={savingEdit} className={btn.primary}>
+                      {savingEdit ? (<><Spinner /> Saving…</>) : "Save changes"}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={selectedReport.status} />
+                    <PriorityBadge priority={selectedReport.priority} />
+                    <Tag>{categoryLabel(selectedReport.category)}</Tag>
+                  </div>
 
-            <div className="mt-6 rounded-lg border border-gray-800 bg-gray-950/50 p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Maintenance progress</p>
-              <p className="mt-2 text-sm text-gray-200">
-                Current status: <span className="capitalize">{selectedReport.status}</span>
-              </p>
-              <p className="mt-2 text-sm text-gray-400">
-                {selectedReport.resolutionNote || "No technician notes have been added yet."}
-              </p>
-            </div>
+                  {!canEditReport(selectedReport) && (
+                    <p className="mt-3 text-xs text-muted">
+                      Reports can only be edited while they are open and not yet assigned to a technician.
+                    </p>
+                  )}
 
-            {selectedReport.photoURL && (
-              <div className="mt-6">
-                <p className="text-xs text-gray-500">Photograph</p>
-                <img
-                  src={selectedReport.photoURL}
-                  alt={`Photograph for ${selectedReport.title}`}
-                  className="mt-2 max-h-80 w-full rounded-lg border border-gray-700 object-contain"
-                />
-              </div>
-            )}
-              </>
-                                                                                                                                                        )}
+                  <dl className="mt-6 grid gap-5 sm:grid-cols-2">
+                    <Detail label="Submitted">{selectedReport.createdAt?.toDate?.()?.toLocaleString() || "—"}</Detail>
+                    <Detail label="Location">
+                      {selectedReport.dormitory || "—"} · Room {selectedReport.roomNumber || "—"}
+                    </Detail>
+                    <Detail label="Assigned technician">{selectedReport.assignedTo || "Not assigned yet"}</Detail>
+                    <Detail label="Report ID">
+                      <span className="break-all font-mono text-xs text-ink-2">{selectedReport.id}</span>
+                    </Detail>
+                  </dl>
+
+                  <div className="mt-6">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Description</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink">{selectedReport.description}</p>
+                  </div>
+
+                  <div className="mt-6 rounded-xl border border-line bg-surface-2/60 p-4">
+                    <div className="flex items-center gap-2">
+                      <Icon.Wrench width={16} height={16} className="text-muted" />
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Maintenance progress</p>
+                    </div>
+                    <p className="mt-2 text-sm text-ink">
+                      Current status: <span className="font-medium">{STATUSES.find((s) => s.value === selectedReport.status)?.label ?? selectedReport.status}</span>
+                    </p>
+                    <p className="mt-1.5 text-sm text-muted">
+                      {selectedReport.resolutionNote || "No technician notes have been added yet."}
+                    </p>
+                  </div>
+
+                  {selectedReport.photoURL && (
+                    <div className="mt-6">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Photo</p>
+                      <img
+                        src={selectedReport.photoURL}
+                        alt={`Photograph for ${selectedReport.title}`}
+                        className="mt-2 max-h-80 w-full rounded-xl border border-line bg-surface-2 object-contain"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </section>
         </div>
       )}
-    </div>
+    </AppShell>
   );
 }

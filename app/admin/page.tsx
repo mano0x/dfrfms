@@ -7,6 +7,10 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
+import {
+  Alert, AppShell, Card, Field, Icon, LoadingScreen, PRIORITIES, PageHeader, PriorityBadge,
+  STATUSES, StatGrid, StatusBadge, Tabs, btn, cx, inputCls, selectCls,
+} from "@/components/ui";
 
 type Report = {
   id: string;
@@ -32,19 +36,14 @@ type UserRecord = {
   specialization?: string;
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  open: "bg-red-500/20 text-red-400 border border-red-500/30",
-  "in-progress": "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
-  resolved: "bg-green-500/20 text-green-400 border border-green-500/30",
-  closed: "bg-gray-500/20 text-gray-400 border border-gray-500/30",
+const ROLE_TONE: Record<string, string> = {
+  admin: "bg-violet-50 text-violet-700 ring-violet-600/15 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-400/20",
+  technician: "bg-brand-soft text-brand-ink ring-brand/20",
+  student: "bg-surface-2 text-ink-2 ring-line-strong",
 };
 
-const PRIORITY_COLORS: Record<string, string> = {
-  critical: "bg-red-600/20 text-red-300 border border-red-600/30",
-  high: "bg-orange-500/20 text-orange-300 border border-orange-500/30",
-  medium: "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30",
-  low: "bg-blue-500/20 text-blue-300 border border-blue-500/30",
-};
+const tableSelect =
+  "ui-select rounded-md border border-line bg-surface py-1.5 pl-2.5 text-xs font-medium text-ink transition hover:border-line-strong focus:border-brand focus:outline-none focus:ring-4 focus:ring-ring";
 
 export default function AdminDashboard() {
   const { user, role, loading } = useAuth();
@@ -137,154 +136,138 @@ export default function AdminDashboard() {
   };
 
   if (loading || dataLoading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <p className="text-gray-400">Loading...</p>
-      </div>
-    );
+    return <LoadingScreen label="Loading the admin console…" />;
   }
 
+  const unassigned = reports.filter((r) => !r.assignedTo && r.status === "open").length;
+  const filtersActive = search || filterStatus !== "all" || filterPriority !== "all";
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-gray-900 to-gray-900/80 border-b border-gray-800/50 backdrop-blur px-6 py-5 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-white">DFRFMS</h1>
-            <p className="text-xs text-gray-400 mt-1">Administrator Dashboard</p>
-          </div>
-          <button
-            onClick={() => signOut(auth).then(() => router.push("/login"))}
-            className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition"
-          >
-            Sign Out
-          </button>
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-          {[
-            { label: "Total Reports", value: stats.total, color: "from-blue-600 to-cyan-600", icon: "📊" },
-            { label: "Open", value: stats.open, color: "from-red-600 to-orange-600", icon: "🔴" },
-            { label: "In Progress", value: stats.inProgress, color: "from-yellow-600 to-amber-600", icon: "⏳" },
-            { label: "Resolved", value: stats.resolved, color: "from-green-600 to-emerald-600", icon: "✓" },
-          ].map((s) => (
-            <div key={s.label} className={`bg-gradient-to-br ${s.color} rounded-lg p-4 shadow-lg hover:shadow-xl transition`}>
-              <p className="text-white/80 text-xs font-medium mb-2">{s.label}</p>
-              <div className="flex items-end justify-between">
-                <p className="text-3xl font-bold text-white">{s.value}</p>
-                <span className="text-2xl">{s.icon}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-gray-800">
-          {(["reports", "users", "create-user"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 capitalize ${
-                activeTab === tab
-                  ? "border-blue-500 text-blue-400"
-                  : "border-transparent text-gray-400 hover:text-gray-300"
-              }`}
-            >
-              {tab === "create-user" ? "Create User" : tab}
+    <AppShell
+      role="admin"
+      name={user?.email || "Administrator"}
+      detail="Administrator"
+      onSignOut={() => signOut(auth).then(() => router.push("/login"))}
+    >
+      <PageHeader
+        title="Admin console"
+        subtitle={
+          unassigned > 0
+            ? `${unassigned} open report${unassigned === 1 ? "" : "s"} waiting for a technician.`
+            : "Every open report has a technician assigned."
+        }
+        action={
+          activeTab !== "create-user" && (
+            <button className={btn.primary} onClick={() => setActiveTab("create-user")}>
+              <Icon.UserPlus width={16} height={16} /> Add user
             </button>
-          ))}
-        </div>
+          )
+        }
+      />
 
-        {/* Reports Tab */}
-        {activeTab === "reports" && (
-          <div>
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3 mb-4">
+      <StatGrid
+        items={[
+          { label: "Total reports", value: stats.total, tone: "brand", icon: <Icon.Chart width={16} height={16} /> },
+          { label: "Open", value: stats.open, tone: "rose", icon: <Icon.Alert width={16} height={16} /> },
+          { label: "In progress", value: stats.inProgress, tone: "amber", icon: <Icon.Clock width={16} height={16} /> },
+          { label: "Resolved", value: stats.resolved, tone: "emerald", icon: <Icon.Check width={16} height={16} /> },
+        ]}
+      />
+
+      <div className="mb-5">
+        <Tabs
+          active={activeTab}
+          onChange={setActiveTab}
+          tabs={[
+            { value: "reports", label: "Reports", icon: <Icon.Clipboard width={16} height={16} />, count: reports.length },
+            { value: "users", label: "Users", icon: <Icon.Users width={16} height={16} />, count: users.length },
+            { value: "create-user", label: "Create user", icon: <Icon.UserPlus width={16} height={16} /> },
+          ]}
+        />
+      </div>
+
+      {/* Reports */}
+      {activeTab === "reports" && (
+        <div className="ui-fade-up">
+          <div className="mb-4 flex flex-wrap gap-3">
+            <div className="relative min-w-[220px] flex-1">
+              <Icon.Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" width={16} height={16} />
               <input
+                aria-label="Search reports"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by title, student, room..."
-                className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 flex-1 min-w-[200px]"
+                placeholder="Search by title, student or room…"
+                className={cx(inputCls, "pl-10")}
               />
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-              >
-                <option value="all">All Statuses</option>
-                <option value="open">Open</option>
-                <option value="in-progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-                <option value="closed">Closed</option>
-              </select>
-              <select
-                value={filterPriority}
-                onChange={(e) => setFilterPriority(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-              >
-                <option value="all">All Priorities</option>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
             </div>
+            <select aria-label="Filter by status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={cx(selectCls, "w-auto min-w-40")}>
+              <option value="all">All statuses</option>
+              {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <select aria-label="Filter by priority" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className={cx(selectCls, "w-auto min-w-40")}>
+              <option value="all">All priorities</option>
+              {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+            {filtersActive && (
+              <button
+                className={btn.ghost}
+                onClick={() => { setSearch(""); setFilterStatus("all"); setFilterPriority("all"); }}
+              >
+                <Icon.X width={16} height={16} /> Clear
+              </button>
+            )}
+          </div>
 
-            {/* Table */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800 text-gray-400 text-left">
-                    <th className="px-4 py-3">Title</th>
-                    <th className="px-4 py-3">Room</th>
+                  <tr className="border-b border-line bg-surface-2/70 text-left text-xs font-semibold uppercase tracking-wide text-muted">
+                    <th className="px-4 py-3">Report</th>
+                    <th className="px-4 py-3">Location</th>
                     <th className="px-4 py-3">Priority</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Assigned To</th>
-                    <th className="px-4 py-3">Actions</th>
+                    <th className="px-4 py-3">Change status</th>
+                    <th className="px-4 py-3">Technician</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-line">
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center text-gray-500 py-8">
-                        No reports found.
+                      <td colSpan={6} className="px-4 py-14 text-center text-muted">
+                        No reports match your filters.
                       </td>
                     </tr>
                   )}
                   {filtered.map((r) => (
-                    <tr key={r.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-white">{r.title}</p>
-                        <p className="text-gray-500 text-xs">{r.studentName}</p>
+                    <tr key={r.id} className="transition hover:bg-surface-2/50">
+                      <td className="max-w-[280px] px-4 py-3">
+                        <p className="truncate font-medium text-ink">{r.title}</p>
+                        <p className="truncate text-xs text-muted">
+                          {r.studentName} · {r.createdAt?.toDate?.()?.toLocaleDateString() || "—"}
+                        </p>
                       </td>
-                      <td className="px-4 py-3 text-gray-300">
-                        {r.dormitory} / {r.roomNumber}
+                      <td className="whitespace-nowrap px-4 py-3 text-ink-2">
+                        {r.dormitory} · {r.roomNumber}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-1 rounded-full capitalize ${PRIORITY_COLORS[r.priority] || ""}`}>
-                          {r.priority}
-                        </span>
-                      </td>
+                      <td className="px-4 py-3"><PriorityBadge priority={r.priority} /></td>
+                      <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                       <td className="px-4 py-3">
                         <select
+                          aria-label={`Status for ${r.title}`}
                           value={r.status}
                           onChange={(e) => updateStatus(r.id, e.target.value)}
-                          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white"
+                          className={tableSelect}
                         >
-                          <option value="open">Open</option>
-                          <option value="in-progress">In Progress</option>
-                          <option value="resolved">Resolved</option>
-                          <option value="closed">Closed</option>
+                          {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
                       </td>
                       <td className="px-4 py-3">
                         <select
+                          aria-label={`Technician for ${r.title}`}
                           value={r.assignedTo || ""}
                           onChange={(e) => assignTech(r.id, e.target.value)}
-                          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white"
+                          className={cx(tableSelect, !r.assignedTo && "border-dashed text-muted")}
                         >
                           <option value="">Unassigned</option>
                           {technicians.map((t) => (
@@ -292,47 +275,50 @@ export default function AdminDashboard() {
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-1 rounded-full capitalize ${STATUS_COLORS[r.status] || ""}`}>
-                          {r.status}
-                        </span>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+            <div className="border-t border-line px-4 py-2.5 text-xs text-muted">
+              Showing {filtered.length} of {reports.length} reports
+            </div>
+          </Card>
+        </div>
+      )}
 
-        {/* Users Tab */}
-        {activeTab === "users" && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
+      {/* Users */}
+      {activeTab === "users" && (
+        <Card className="ui-fade-up overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-gray-400 text-left">
+                <tr className="border-b border-line bg-surface-2/70 text-left text-xs font-semibold uppercase tracking-wide text-muted">
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Role</th>
                   <th className="px-4 py-3">Details</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-line">
                 {users.map((u) => (
-                  <tr key={u.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                    <td className="px-4 py-3 font-medium text-white">{u.name}</td>
-                    <td className="px-4 py-3 text-gray-300">{u.email}</td>
+                  <tr key={u.id} className="transition hover:bg-surface-2/50">
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-1 rounded-full capitalize ${
-                        u.role === "admin" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" :
-                        u.role === "technician" ? "bg-blue-500/20 text-blue-300 border border-blue-500/30" :
-                        "bg-gray-500/20 text-gray-300 border border-gray-500/30"
-                      }`}>
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-2 text-xs font-bold text-ink-2">
+                          {(u.name || "?").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase()}
+                        </span>
+                        <span className="font-medium text-ink">{u.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-ink-2">{u.email}</td>
+                    <td className="px-4 py-3">
+                      <span className={cx("inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ring-1 ring-inset", ROLE_TONE[u.role] ?? ROLE_TONE.student)}>
                         {u.role}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">
-                      {u.role === "student" && `${u.dormitory} / Room ${u.roomNumber}`}
+                    <td className="px-4 py-3 text-xs text-muted">
+                      {u.role === "student" && `${u.dormitory} · Room ${u.roomNumber}`}
                       {u.role === "technician" && u.specialization}
                     </td>
                   </tr>
@@ -340,71 +326,85 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
-        )}
+        </Card>
+      )}
 
-        {/* Create User Tab */}
-        {activeTab === "create-user" && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 max-w-lg">
-            <h2 className="text-lg font-semibold mb-6">Create New User</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Full Name</label>
-                <input value={newName} onChange={(e) => setNewName(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-                  placeholder="Jonas Petraitis" />
-              </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Email</label>
-                <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-                  placeholder="user@example.com" />
-              </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Role</label>
-                <select value={newRole} onChange={(e) => setNewRole(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none">
-                  <option value="student">Student</option>
-                  <option value="technician">Technician</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
+      {/* Create user */}
+      {activeTab === "create-user" && (
+        <div className="ui-fade-up grid gap-6 lg:grid-cols-[minmax(0,560px)_1fr]">
+          <Card className="p-5 sm:p-7">
+            <h2 className="text-lg font-semibold text-ink">Create a user profile</h2>
+            <p className="mt-1 text-sm text-muted">The profile decides which dashboard the person sees after signing in.</p>
+            <form
+              className="mt-6 space-y-5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreateUser();
+              }}
+            >
+              <Field label="Role">
+                <div role="radiogroup" className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: "student", label: "Student" },
+                    { value: "technician", label: "Technician" },
+                    { value: "admin", label: "Admin" },
+                  ].map((r) => (
+                    <label
+                      key={r.value}
+                      className={cx(
+                        "cursor-pointer rounded-lg border px-3 py-2.5 text-center text-sm font-semibold transition focus-within:ring-4 focus-within:ring-ring",
+                        newRole === r.value ? "border-brand bg-brand-soft text-brand-ink" : "border-line text-ink-2 hover:border-line-strong"
+                      )}
+                    >
+                      <input type="radio" name="role" value={r.value} checked={newRole === r.value} onChange={() => setNewRole(r.value)} className="sr-only" />
+                      {r.label}
+                    </label>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Full name" required htmlFor="new-name">
+                <input id="new-name" value={newName} onChange={(e) => setNewName(e.target.value)} className={inputCls} placeholder="Jonas Petraitis" />
+              </Field>
+              <Field label="Email" required htmlFor="new-email">
+                <input id="new-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className={inputCls} placeholder="user@example.com" />
+              </Field>
               {newRole === "student" && (
-                <>
-                  <div>
-                    <label className="text-sm text-gray-400 block mb-1">Dormitory</label>
-                    <input value={newDorm} onChange={(e) => setNewDorm(e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-                      placeholder="Dormitory A" />
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-400 block mb-1">Room Number</label>
-                    <input value={newRoom} onChange={(e) => setNewRoom(e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-                      placeholder="204" />
-                  </div>
-                </>
-              )}
-              {newRole === "technician" && (
-                <div>
-                  <label className="text-sm text-gray-400 block mb-1">Specialization</label>
-                  <input value={newSpec} onChange={(e) => setNewSpec(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-                    placeholder="Electrical / Plumbing / HVAC" />
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <Field label="Dormitory" htmlFor="new-dorm">
+                    <input id="new-dorm" value={newDorm} onChange={(e) => setNewDorm(e.target.value)} className={inputCls} placeholder="Dormitory A" />
+                  </Field>
+                  <Field label="Room number" htmlFor="new-room">
+                    <input id="new-room" value={newRoom} onChange={(e) => setNewRoom(e.target.value)} className={inputCls} placeholder="204" />
+                  </Field>
                 </div>
               )}
-              {createMsg && (
-                <p className={`text-sm ${createMsg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
-                  {createMsg}
-                </p>
+              {newRole === "technician" && (
+                <Field label="Specialization" htmlFor="new-spec">
+                  <input id="new-spec" value={newSpec} onChange={(e) => setNewSpec(e.target.value)} className={inputCls} placeholder="Electrical / Plumbing / HVAC" />
+                </Field>
               )}
-              <button onClick={handleCreateUser}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition text-sm">
-                Create User
+              {createMsg && (
+                <Alert tone={createMsg.startsWith("✓") ? "success" : "error"}>
+                  {createMsg.replace(/^✓\s*/, "")}
+                </Alert>
+              )}
+              <button type="submit" className={cx(btn.primary, "w-full py-3")}>
+                <Icon.UserPlus width={16} height={16} /> Create user
               </button>
+            </form>
+          </Card>
+          <Card className="h-fit p-5">
+            <div className="flex items-center gap-2 text-ink">
+              <Icon.Shield width={16} height={16} />
+              <p className="text-sm font-semibold">About user profiles</p>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              This saves a profile with the person&apos;s role and details. Sign-in accounts (email and password)
+              are managed separately in Firebase Authentication.
+            </p>
+          </Card>
+        </div>
+      )}
+    </AppShell>
   );
 }
