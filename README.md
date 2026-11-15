@@ -243,7 +243,81 @@ most 5 MB.
 - `components/Timeline.tsx` — history timeline and target-time indicator.
 - `tests/maintenance.test.ts` — unit tests of the domain rules.
 
-## Security Rules
+## Appwrite Backend (branch `appwrite-migration`)
+
+On this branch the application uses Appwrite (Auth, Databases, Storage) instead
+of Firebase. The Firebase sections below describe the version that is still
+live on `main` until the migration is verified.
+
+### Architecture
+
+```text
+Browser (pages) --fetch /api/*--> Next.js route handlers --API key--> Appwrite
+                 httpOnly cookie    authorise, validate, write          (Frankfurt)
+```
+
+- **The browser never talks to Appwrite.** It calls the application's own
+  routes under `/api`. The Appwrite tables and the photo bucket grant no access
+  to browsers at all; only the server's API key can reach them.
+- **Session:** after sign-in the Appwrite session secret is kept in an
+  `httpOnly`, `SameSite=Strict` cookie (`Secure` in production). Page scripts
+  cannot read it. Sign-out revokes the session in Appwrite.
+- **Roles** are Appwrite account labels (`student`, `technician`, `admin`),
+  which only the server can set. A role sent by the browser is never trusted.
+- **Authorisation** rules are pure functions in `lib/access.ts`; every route
+  applies them on the server. The pages use the same functions only to decide
+  which controls to show.
+- **Atomic writes:** a report change and its history entry are written in one
+  Appwrite transaction (`lib/server/reports.ts`).
+- **Brute-force protection:** 5 failed sign-ins in 15 minutes lock the address
+  for 15 minutes (`lib/auth-rules.ts`, table `auth_attempts`).
+- **Cross-site requests:** every state-changing route requires the request to
+  come from this site (Origin check) in addition to the SameSite cookie.
+- **Photos:** resized in the browser (this also removes hidden data such as GPS
+  position), checked on the server by content rather than file name, stored in
+  the private bucket `dormitory-fault-photos`, and served by `/api/photos/[id]`
+  only to people who may see the report.
+
+### Routes
+
+| Route | Method | Who | Purpose |
+| --- | --- | --- | --- |
+| `/api/auth/login` | POST | anyone | Sign in under a chosen role |
+| `/api/auth/logout` | POST | signed in | Sign out and revoke the session |
+| `/api/auth/me` | GET | anyone | Who is signed in |
+| `/api/auth/recovery` | POST, PUT | anyone | Request / complete a password reset |
+| `/api/users` | GET, POST | administrator | List users; create account, role and profile |
+| `/api/reports` | GET | signed in | Own reports (resident) or all reports (staff) |
+| `/api/reports` | POST | resident | Submit a report |
+| `/api/reports/[id]` | GET, PATCH | by rule | View; edit, status, assign, priority, note |
+| `/api/reports/[id]/history` | GET | by rule | History of one report |
+| `/api/photos` | POST | resident | Upload a photo |
+| `/api/photos/[id]` | GET | by rule | View a photo |
+
+### Data
+
+Database `dfrmms`: tables `users`, `fault_reports`, `status_log` (same fields
+as the Firestore collections; `photoURL` became `photoFileId`) and
+`auth_attempts`. Created by `npm run appwrite:setup` (repeatable, never deletes).
+
+### Configuration
+
+Copy `.env.example` to `.env.local` and fill it in. `APPWRITE_API_KEY` is a
+secret: it has no `NEXT_PUBLIC_` prefix, is never sent to the browser, and must
+never be committed.
+
+### Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run appwrite:check` | Report what is missing in Appwrite, change nothing |
+| `npm run appwrite:setup` | Create the database, tables, indexes and bucket |
+| `npm run appwrite:verify` | Check the structure, transactions and visitor access |
+| `npm run appwrite:test-users` | Create the test accounts (`-- --remove` deletes them) |
+| `npm test` | Unit tests (domain, access, authentication and image rules) |
+| `npm run test:api` | HTTP-level authentication, workflow and security tests; needs `npm run dev` running and the test accounts |
+
+## Security Rules (Firebase version)
 
 Access is enforced on the server by `firestore.rules` and `storage.rules`
 (least privilege); the checks in the pages are only for usability.

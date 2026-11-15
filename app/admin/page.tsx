@@ -1,42 +1,22 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import {
   allowedNextStatuses, firstError, isOverdue, newUserSchema, priorityForClassification,
   type Priority, type Status,
 } from "@/lib/maintenance";
-import { assignTechnician, changeStatus, overridePriority, type Actor } from "@/lib/reports";
+import {
+  assignTechnician, changeStatus, errorMessage, fetchReports, formatDate, formatDateTime, overridePriority, photoUrl, toDate,
+  type Report,
+} from "@/lib/reports";
 import { TargetBadge, Timeline } from "@/components/Timeline";
 import {
   Alert, AppShell, Card, Detail, Field, Icon, LoadingScreen, PRIORITIES, PageHeader, PriorityBadge,
   STATUSES, Spinner, StatGrid, StatusBadge, Tabs, Tag, URGENCIES, btn, categoryLabel, cx, inputCls,
   selectCls, selectInlineCls, statusLabel,
 } from "@/components/ui";
-
-type Report = {
-  id: string;
-  title: string;
-  category: string;
-  urgency?: string;
-  priority: string;
-  priorityOverridden?: boolean;
-  priorityReason?: string;
-  status: string;
-  dormitory: string;
-  roomNumber: string;
-  studentName: string;
-  studentId: string;
-  description: string;
-  createdAt: any;
-  assignedTo?: string | null;
-  assignedToId?: string | null;
-  resolutionNote?: string;
-  photoURL?: string;
-};
 
 type UserRecord = {
   id: string;
@@ -68,6 +48,7 @@ export default function AdminDashboard() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   // Report actions
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -90,67 +71,60 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!loading && (!user || role !== "admin")) router.push("/");
-  }, [user, role, loading]);
+  }, [user, role, loading, router]);
+
+  const fetchData = async () => {
+    try {
+      // Both lists come from server routes that only answer administrators.
+      const [reportList, userList] = await Promise.all([
+        fetchReports(),
+        api<{ users: UserRecord[] }>("/api/users"),
+      ]);
+      setReports(reportList);
+      setUsers(userList.users);
+      setLoadError("");
+    } catch (err) {
+      console.error("Could not load the admin data:", err);
+      setLoadError("The data could not be loaded. Please refresh the page.");
+    } finally {
+      setDataLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Load data only once an administrator is signed in.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once after sign-in; state is only set after the request finishes
     if (user && role === "admin") fetchData();
   }, [user, role]);
 
-  const fetchData = async () => {
-    setDataLoading(true);
-    const [rSnap, uSnap] = await Promise.all([
-      getDocs(query(collection(db, "fault_reports"), orderBy("createdAt", "desc"))),
-      getDocs(collection(db, "users")),
-    ]);
-    setReports(rSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Report)));
-    setUsers(uSnap.docs.map((d) => ({ id: d.id, ...d.data() } as UserRecord)));
-    setDataLoading(false);
-  };
-
-  const actor = (): Actor => ({
-    uid: user!.uid,
-    name: users.find((u) => u.id === user!.uid)?.name || user!.email || "Administrator",
-    role: "admin",
-  });
-
-  const patchReport = (id: string, changes: Partial<Report>) =>
-    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, ...changes } : r)));
-
   // Run one change on a report; show a message if it fails.
-  const run = async (reportId: string, action: () => Promise<void>) => {
+  const run = async (reportId: string, action: () => Promise<Report>) => {
     setBusyId(reportId);
     setActionError("");
     try {
-      await action();
+      const updated = await action();
+      setReports((prev) => prev.map((r) => (r.id === reportId ? updated : r)));
       setHistoryVersion((v) => v + 1);
+      return true;
     } catch (err) {
       console.error("Report update failed:", err);
-      setActionError(err instanceof Error && !("code" in err) ? err.message : "The change could not be saved. Please try again.");
+      setActionError(errorMessage(err));
+      return false;
     } finally {
       setBusyId(null);
     }
   };
 
-  const updateStatus = (report: Report, status: Status) =>
-    run(report.id, async () => {
-      await changeStatus(report, status, actor());
-      patchReport(report.id, { status });
-    });
+  const updateStatus = (report: Report, status: Status) => run(report.id, () => changeStatus(report.id, status));
 
+  // Only the technician's ID is sent; the server looks up the name itself.
   const assignTech = (report: Report, technicianId: string) =>
-    run(report.id, async () => {
-      const tech = technicians.find((t) => t.id === technicianId) ?? null;
-      const status = await assignTechnician(report, tech ? { id: tech.id, name: tech.name } : null, actor());
-      patchReport(report.id, { assignedTo: tech?.name ?? null, assignedToId: tech?.id ?? null, status });
-    });
+    run(report.id, () => assignTechnician(report.id, technicianId || null));
 
-  const savePriority = (report: Report) =>
-    run(report.id, async () => {
-      await overridePriority(report, triagePriority, triageReason, actor());
-      patchReport(report.id, { priority: triagePriority, priorityOverridden: true, priorityReason: triageReason.trim() });
-      setTriageReason("");
-    });
+  const savePriority = async (report: Report) => {
+    const saved = await run(report.id, () => overridePriority(report.id, triagePriority, triageReason));
+    if (saved) setTriageReason("");
+  };
 
   const openDetails = (report: Report) => {
     setSelectedId(report.id);
@@ -184,7 +158,7 @@ export default function AdminDashboard() {
   };
 
   const technicians = users.filter((u) => u.role === "technician");
-  const createdDate = (r: Report): Date | null => r.createdAt?.toDate?.() ?? null;
+  const createdDate = (r: Report): Date | null => toDate(r.createdAt);
   const overdue = (r: Report) => isOverdue(createdDate(r), r.priority, r.status);
 
   // The select needs an ID; reports assigned before IDs were stored only have a name.
@@ -230,7 +204,7 @@ export default function AdminDashboard() {
   return (
     <AppShell
       role="admin"
-      name={users.find((u) => u.id === user?.uid)?.name || user?.email || "Administrator"}
+      name={user?.name || user?.email || "Administrator"}
       detail="Administrator"
       onSignOut={() => signOut().then(() => router.push("/"))}
     >
@@ -258,6 +232,12 @@ export default function AdminDashboard() {
           { label: "Overdue", value: stats.overdue, tone: "plain", icon: <Icon.Alert width={16} height={16} /> },
         ]}
       />
+
+      {loadError && (
+        <div className="mb-5">
+          <Alert tone="error">{loadError}</Alert>
+        </div>
+      )}
 
       <div className="mb-5">
         <Tabs
@@ -339,7 +319,7 @@ export default function AdminDashboard() {
                       <td className="max-w-[280px] px-4 py-3">
                         <p className="truncate font-medium text-ink">{r.title}</p>
                         <p className="truncate text-xs text-muted">
-                          {r.studentName} · {createdDate(r)?.toLocaleDateString() || "—"}
+                          {r.studentName} · {formatDate(r.createdAt)}
                         </p>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-ink-2">
@@ -560,7 +540,7 @@ export default function AdminDashboard() {
                 <dl className="mt-5 grid gap-4 sm:grid-cols-2">
                   <Detail label="Reported by">{selected.studentName || "—"}</Detail>
                   <Detail label="Location">{selected.dormitory || "—"} · Room {selected.roomNumber || "—"}</Detail>
-                  <Detail label="Submitted">{createdDate(selected)?.toLocaleString() || "—"}</Detail>
+                  <Detail label="Submitted">{formatDateTime(selected.createdAt)}</Detail>
                   <Detail label="Classification">
                     {URGENCIES.find((u) => u.value === selected.urgency)?.label ?? "—"}
                   </Detail>
@@ -580,11 +560,11 @@ export default function AdminDashboard() {
                   </div>
                 )}
 
-                {selected.photoURL && (
+                {selected.photoFileId && (
                   <div className="mt-5">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted">Photo</p>
-                    <a href={selected.photoURL} target="_blank" rel="noreferrer" className="mt-2 block">
-                      <img src={selected.photoURL} alt={`Photo of ${selected.title}`} className="max-h-64 w-full rounded-lg border border-line bg-surface-2 object-contain" />
+                    <a href={photoUrl(selected.photoFileId)} target="_blank" rel="noreferrer" className="mt-2 block">
+                      <img src={photoUrl(selected.photoFileId)} alt={`Photo of ${selected.title}`} className="max-h-64 w-full rounded-lg border border-line bg-surface-2 object-contain" />
                     </a>
                   </div>
                 )}

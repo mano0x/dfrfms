@@ -38,7 +38,7 @@ const denied = async (fn) => {
 console.log(`\nVerifying Appwrite project ${projectId}`);
 
 // 1. Structure
-for (const [tableId, columnCount, indexCount] of [["users", 7, 2], ["fault_reports", 18, 4], ["status_log", 10, 1]]) {
+for (const [tableId, columnCount, indexCount] of [["auth_attempts", 3, 0], ["users", 7, 2], ["fault_reports", 18, 5], ["status_log", 10, 1]]) {
   const table = await tablesDB.getTable({ databaseId: DATABASE_ID, tableId });
   const { columns } = await tablesDB.listColumns({ databaseId: DATABASE_ID, tableId });
   const { indexes } = await tablesDB.listIndexes({ databaseId: DATABASE_ID, tableId });

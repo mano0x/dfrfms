@@ -1,41 +1,21 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { allowedNextStatuses, isAssignedTo, isOverdue, type Status } from "@/lib/maintenance";
-import { changeStatus, saveResolutionNote, type Actor } from "@/lib/reports";
+import {
+  changeStatus, errorMessage, fetchReports, formatDate, photoUrl, saveResolutionNote, toDate, type Report,
+} from "@/lib/reports";
 import { TargetBadge, Timeline } from "@/components/Timeline";
 import {
   Alert, AppShell, EmptyState, Icon, LoadingScreen, PageHeader, PriorityBadge, STATUSES, STATUS_BAR,
   Spinner, StatGrid, StatusBadge, Tabs, Tag, btn, categoryLabel, cx, inputCls, selectCls, selectInlineCls, statusLabel,
 } from "@/components/ui";
 
-type Report = {
-  id: string;
-  title: string;
-  category: string;
-  priority: string;
-  status: string;
-  description: string;
-  dormitory: string;
-  roomNumber: string;
-  studentName: string;
-  studentId: string;
-  assignedTo?: string | null;
-  assignedToId?: string | null;
-  resolutionNote?: string;
-  createdAt: any;
-  updatedAt: any;
-  photoURL?: string;
-};
-
 export default function TechnicianDashboard() {
   const { user, role, loading, signOut } = useAuth();
   const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
-  const [userProfile, setUserProfile] = useState<any>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"assigned" | "all">("assigned");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -44,73 +24,61 @@ export default function TechnicianDashboard() {
   const [saving, setSaving] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
+  const [loadError, setLoadError] = useState("");
+
+  // Name and specialization come from the signed-in user's profile.
+  const userProfile = user;
 
   useEffect(() => {
     if (!loading && (!user || role !== "technician")) router.push("/");
-  }, [user, role, loading]);
-
-  useEffect(() => {
-    if (user) fetchData();
-  }, [user]);
+  }, [user, role, loading, router]);
 
   const fetchData = async () => {
-    setDataLoading(true);
-    // Get technician profile
-    const uSnap = await getDocs(
-      query(collection(db, "users"), where("email", "==", user!.email))
-    );
-    let profile = null;
-    if (!uSnap.empty) {
-      profile = uSnap.docs[0].data();
-      setUserProfile(profile);
+    try {
+      const list = await fetchReports();
+      setReports(list);
+      setLoadError("");
+    } catch (err) {
+      console.error("Could not load reports:", err);
+      setLoadError("The reports could not be loaded. Please refresh the page.");
+    } finally {
+      setDataLoading(false);
     }
-
-    // Get all reports (we filter client-side by assignment)
-    const rSnap = await getDocs(
-      query(collection(db, "fault_reports"), orderBy("createdAt", "desc"))
-    );
-    setReports(rSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Report)));
-    setDataLoading(false);
   };
 
-  const actor = (): Actor => ({
-    uid: user!.uid,
-    name: userProfile?.name || user!.email || "Technician",
-    role: "technician",
-  });
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once after sign-in; state is only set after the request finishes
+    if (user && role === "technician") fetchData();
+  }, [user, role]);
 
   // Run one change on a report, showing a message on that report if it fails.
-  const run = async (reportId: string, action: () => Promise<void>) => {
+  const run = async (reportId: string, action: () => Promise<Report>) => {
     setSaving(reportId);
     setActionError(null);
     try {
-      await action();
+      const updated = await action();
+      setReports((prev) => prev.map((r) => (r.id === reportId ? updated : r)));
       setHistoryVersion((v) => v + 1);
+      return true;
     } catch (err) {
       console.error("Report update failed:", err);
-      setActionError({
-        id: reportId,
-        message: err instanceof Error && !("code" in err) ? err.message : "The change could not be saved. Please try again.",
-      });
+      setActionError({ id: reportId, message: errorMessage(err) });
+      return false;
     } finally {
       setSaving(null);
     }
   };
 
-  const updateStatus = (report: Report, status: Status) =>
-    run(report.id, async () => {
-      await changeStatus(report, status, actor());
-      setReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, status } : r)));
-    });
+  // The server checks again that the report is assigned to this technician
+  // and that the status change is allowed.
+  const updateStatus = (report: Report, status: Status) => run(report.id, () => changeStatus(report.id, status));
 
-  const saveNote = (report: Report) =>
-    run(report.id, async () => {
-      const saved = await saveResolutionNote(report, noteInputs[report.id] || "", actor());
-      setReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, resolutionNote: saved } : r)));
-      setNoteInputs((prev) => ({ ...prev, [report.id]: "" }));
-    });
+  const saveNote = async (report: Report) => {
+    const saved = await run(report.id, () => saveResolutionNote(report.id, noteInputs[report.id] || ""));
+    if (saved) setNoteInputs((prev) => ({ ...prev, [report.id]: "" }));
+  };
 
-  const me = { uid: user?.uid, name: userProfile?.name };
+  const me = { uid: user?.uid, name: user?.name };
   const assignedReports = reports.filter((r) => isAssignedTo(r, me));
 
   const displayReports =
@@ -120,7 +88,7 @@ export default function TechnicianDashboard() {
     (r) => filterStatus === "all" || r.status === filterStatus
   );
 
-  const createdDate = (r: Report): Date | null => r.createdAt?.toDate?.() ?? null;
+  const createdDate = (r: Report): Date | null => toDate(r.createdAt);
 
   const stats = {
     assigned: assignedReports.length,
@@ -160,6 +128,12 @@ export default function TechnicianDashboard() {
           { label: "Resolved", value: stats.resolved, tone: "plain", icon: <Icon.Check width={16} height={16} /> },
         ]}
       />
+
+      {loadError && (
+        <div className="mb-5">
+          <Alert tone="error">{loadError}</Alert>
+        </div>
+      )}
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <Tabs
@@ -238,7 +212,7 @@ export default function TechnicianDashboard() {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     <StatusBadge status={r.status} />
-                    <span className="text-xs text-muted">{createdDate(r)?.toLocaleDateString() || "—"}</span>
+                    <span className="text-xs text-muted">{formatDate(r.createdAt)}</span>
                     <Icon.ChevronDown
                       width={18}
                       height={18}
@@ -254,12 +228,12 @@ export default function TechnicianDashboard() {
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted">Description</p>
                         <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink">{r.description}</p>
                       </div>
-                      {r.photoURL && (
+                      {r.photoFileId && (
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Photo</p>
-                          <a href={r.photoURL} target="_blank" rel="noreferrer" className="mt-2 block">
+                          <a href={photoUrl(r.photoFileId)} target="_blank" rel="noreferrer" className="mt-2 block">
                             <img
-                              src={r.photoURL}
+                              src={photoUrl(r.photoFileId)}
                               alt={`Photo of ${r.title}`}
                               className="max-h-56 w-full rounded-lg border border-line bg-surface-2 object-contain"
                             />

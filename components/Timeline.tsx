@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { fetchTimeline, type LogEntry } from "@/lib/reports";
-import { useAuth } from "@/lib/AuthContext";
+import { fetchTimeline, formatDateTime, type LogEntry } from "@/lib/reports";
 import { isOverdue, targetLabel } from "@/lib/maintenance";
 import { Icon, Spinner, cx, statusLabel } from "@/components/ui";
 
@@ -21,7 +20,7 @@ function describe(e: LogEntry): { text: string; detail?: string } {
       return { text: `Priority changed from ${e.from ?? "—"} to ${e.to ?? "—"}`, detail: e.note ? `Reason: ${e.note}` : undefined };
     default:
       // "note" entries, and entries written before the `type` field existed
-      return { text: "Resolution note added", detail: e.note };
+      return { text: "Resolution note added", detail: e.note ?? undefined };
   }
 }
 
@@ -29,12 +28,10 @@ function describe(e: LogEntry): { text: string; detail?: string } {
 export function Timeline({ reportId, refreshKey = 0 }: { reportId: string; refreshKey?: number }) {
   const [entries, setEntries] = useState<LogEntry[] | null>(null);
   const [failed, setFailed] = useState(false);
-  const { user, role } = useAuth();
 
   useEffect(() => {
-    if (!user || !role) return;
     let cancelled = false;
-    fetchTimeline(reportId, { uid: user.uid, role })
+    fetchTimeline(reportId)
       .then((list) => {
         if (cancelled) return;
         setEntries(list);
@@ -47,7 +44,7 @@ export function Timeline({ reportId, refreshKey = 0 }: { reportId: string; refre
     return () => {
       cancelled = true;
     };
-  }, [reportId, refreshKey, user, role]);
+  }, [reportId, refreshKey]);
 
   if (failed) return <p className="text-sm text-muted">The history could not be loaded.</p>;
   if (entries === null) {
@@ -63,8 +60,8 @@ export function Timeline({ reportId, refreshKey = 0 }: { reportId: string; refre
     <ol className="space-y-4">
       {entries.map((e, i) => {
         const { text, detail } = describe(e);
-        const who = e.actorName || e.technicianName;
-        const role = e.actorRole ? ROLE_NAME[e.actorRole] : e.technicianName ? "Technician" : undefined;
+        const who = e.actorName;
+        const role = e.actorRole ? ROLE_NAME[e.actorRole] : undefined;
         return (
           <li key={e.id} className="relative flex gap-3">
             {i < entries.length - 1 && <span aria-hidden className="absolute left-[5px] top-4 h-full w-px bg-line" />}
@@ -74,7 +71,7 @@ export function Timeline({ reportId, refreshKey = 0 }: { reportId: string; refre
               {detail && <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-2">{detail}</p>}
               <p className="mt-0.5 text-xs text-muted">
                 {who ? `${who}${role ? ` (${role})` : ""} · ` : ""}
-                {e.timestamp?.toDate?.()?.toLocaleString() || "just now"}
+                {formatDateTime(e.timestamp)}
               </p>
             </div>
           </li>

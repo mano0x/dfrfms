@@ -46,3 +46,27 @@ export function siteOrigin(request: Request): string {
   const proto = request.headers.get("x-forwarded-proto") ?? (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
   return `${proto}://${host}`;
 }
+
+/** An error that a route turns into an HTTP response with this status and message. */
+export class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
+/**
+ * Run a route's work and turn failures into responses: an HttpError is
+ * reported with its own status and message; anything unexpected is logged
+ * and reported as a generic failure, so internal details never reach the
+ * browser.
+ */
+export async function handle(work: () => Promise<Response>): Promise<Response> {
+  try {
+    return await work();
+  } catch (err) {
+    if (err instanceof HttpError) return fail(err.status, err.message);
+    console.error("Request failed:", err);
+    return fail(500, "Something went wrong. Please try again.");
+  }
+}

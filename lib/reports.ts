@@ -1,167 +1,57 @@
 /**
- * Data operations on fault reports. Every change to a report is written
- * together with a history entry in `status_log` using a single batch, so the
- * report and its audit trail cannot get out of step.
+ * Browser-side data layer for fault reports. Every function calls one of the
+ * application's own server routes; the server decides what the signed-in
+ * user may see and do (lib/access.ts) and validates everything again.
  */
-import {
-  collection, doc, getDocs, query, serverTimestamp, where, writeBatch,
-  type Timestamp, type WriteBatch,
-} from "firebase/firestore";
-import { db } from "./firebase";
-import {
-  canChangeStatus, priorityOverrideSchema, resolutionNoteSchema, firstError,
-  type Priority, type Role, type Status,
-} from "./maintenance";
+import { ApiError, api } from "./api";
+import { prepareImage } from "./image-client";
+import type { HistoryDTO, ReportDTO } from "./server/reports"; // types only - no server code is bundled
 
-export type Actor = { uid: string; name: string; role: Role };
+export type Report = ReportDTO;
+export type LogEntry = HistoryDTO;
 
-export type LogType = "created" | "status" | "assignment" | "priority" | "note" | "edited";
+export type ReportInput = { title: string; category: string; urgency: string; description: string; photoFileId?: string | null };
 
-export type LogEntry = {
-  id: string;
-  reportId: string;
-  type?: LogType;
-  from?: string | null;
-  to?: string | null;
-  note?: string;
-  actorId?: string;
-  actorName?: string;
-  actorRole?: Role;
-  /** Legacy field written by the coursework version for resolution notes. */
-  technicianName?: string;
-  timestamp?: Timestamp | null;
+export const fetchReports = async () => (await api<{ reports: Report[] }>("/api/reports")).reports;
+
+export const createReport = async (input: ReportInput) =>
+  (await api<{ report: Report }>("/api/reports", { method: "POST", body: input })).report;
+
+const patch = async (reportId: string, body: Record<string, unknown>) =>
+  (await api<{ report: Report }>(`/api/reports/${encodeURIComponent(reportId)}`, { method: "PATCH", body })).report;
+
+export const editReport = (reportId: string, input: ReportInput) => patch(reportId, { action: "edit", ...input });
+export const changeStatus = (reportId: string, status: string) => patch(reportId, { action: "status", status });
+export const assignTechnician = (reportId: string, technicianId: string | null) => patch(reportId, { action: "assign", technicianId });
+export const overridePriority = (reportId: string, priority: string, reason: string) => patch(reportId, { action: "priority", priority, reason });
+export const saveResolutionNote = (reportId: string, note: string) => patch(reportId, { action: "note", note });
+
+export const fetchTimeline = async (reportId: string) =>
+  (await api<{ history: LogEntry[] }>(`/api/reports/${encodeURIComponent(reportId)}/history`)).history;
+
+/** Resize the photo in the browser, upload it, and return its file ID. */
+export async function uploadPhoto(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("photo", await prepareImage(file), "photo.jpg");
+  const response = await fetch("/api/photos", { method: "POST", body: form, credentials: "same-origin" });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(data?.error || "The photo could not be uploaded.", response.status);
+  return data.photoFileId as string;
+}
+
+/** Address of a report's photo. The server checks access on every request. */
+export const photoUrl = (photoFileId: string) => `/api/photos/${encodeURIComponent(photoFileId)}`;
+
+/* ---------- dates (the server sends ISO strings) ---------- */
+
+export const toDate = (iso: string | null | undefined): Date | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
 };
+export const formatDate = (iso: string | null | undefined) => toDate(iso)?.toLocaleDateString() ?? "—";
+export const formatDateTime = (iso: string | null | undefined) => toDate(iso)?.toLocaleString() ?? "—";
 
-type ReportRef = {
-  id: string;
-  /** Account ID of the resident who reported the fault. */
-  studentId: string;
-  status: string;
-  priority?: string;
-  assignedTo?: string | null;
-  assignedToId?: string | null;
-};
-
-function addLog(
-  batch: WriteBatch,
-  report: { id: string; studentId: string },
-  actor: Actor,
-  entry: { type: LogType; from?: string | null; to?: string | null; note?: string }
-) {
-  batch.set(doc(collection(db, "status_log")), {
-    reportId: report.id,
-    // Stored on every entry so a resident can be given access to the
-    // history of their own reports only (see firestore.rules).
-    reportOwnerId: report.studentId,
-    type: entry.type,
-    from: entry.from ?? null,
-    to: entry.to ?? null,
-    note: entry.note ?? "",
-    actorId: actor.uid,
-    actorName: actor.name,
-    actorRole: actor.role,
-    timestamp: serverTimestamp(),
-  });
-}
-
-/** History entry for a newly created report (called right after creation). */
-export async function logReportCreated(reportId: string, actor: Actor) {
-  const batch = writeBatch(db);
-  addLog(batch, { id: reportId, studentId: actor.uid }, actor, { type: "created", to: "open" });
-  await batch.commit();
-}
-
-/** History entry for a resident's edit of their own open report. */
-export async function logReportEdited(reportId: string, actor: Actor) {
-  const batch = writeBatch(db);
-  addLog(batch, { id: reportId, studentId: actor.uid }, actor, { type: "edited" });
-  await batch.commit();
-}
-
-/** Change a report's status if the workflow allows it for the actor's role. */
-export async function changeStatus(report: ReportRef, to: Status, actor: Actor) {
-  if (!canChangeStatus(actor.role, report.status, to)) {
-    throw new Error(`A ${actor.role} cannot change a report from "${report.status}" to "${to}".`);
-  }
-  const batch = writeBatch(db);
-  batch.update(doc(db, "fault_reports", report.id), { status: to, updatedAt: serverTimestamp() });
-  addLog(batch, report, actor, { type: "status", from: report.status, to });
-  await batch.commit();
-}
-
-/**
- * Assign a technician (or unassign with `null`). Assigning an open report also
- * moves it to "in-progress". The technician is stored by account ID
- * (`assignedToId`) with the name kept alongside for display.
- * Returns the report's status after the change.
- */
-export async function assignTechnician(
-  report: ReportRef,
-  technician: { id: string; name: string } | null,
-  actor: Actor
-): Promise<string> {
-  const nextStatus = technician && report.status === "open" ? "in-progress" : report.status;
-  const batch = writeBatch(db);
-  batch.update(doc(db, "fault_reports", report.id), {
-    assignedTo: technician ? technician.name : null,
-    assignedToId: technician ? technician.id : null,
-    status: nextStatus,
-    updatedAt: serverTimestamp(),
-  });
-  addLog(batch, report, actor, {
-    type: "assignment",
-    from: report.assignedTo || null,
-    to: technician ? technician.name : null,
-  });
-  if (nextStatus !== report.status) {
-    addLog(batch, report, actor, { type: "status", from: report.status, to: nextStatus });
-  }
-  await batch.commit();
-  return nextStatus;
-}
-
-/** Administrator triage: set the priority with a recorded reason. */
-export async function overridePriority(report: ReportRef, priority: Priority, reason: string, actor: Actor) {
-  if (actor.role !== "admin") throw new Error("Only an administrator can change a report's priority.");
-  const parsed = priorityOverrideSchema.safeParse({ priority, reason });
-  if (!parsed.success) throw new Error(firstError(parsed));
-  const batch = writeBatch(db);
-  batch.update(doc(db, "fault_reports", report.id), {
-    priority: parsed.data.priority,
-    priorityOverridden: true,
-    priorityReason: parsed.data.reason,
-    updatedAt: serverTimestamp(),
-  });
-  addLog(batch, report, actor, {
-    type: "priority",
-    from: report.priority ?? null,
-    to: parsed.data.priority,
-    note: parsed.data.reason,
-  });
-  await batch.commit();
-}
-
-/** Save the resolution note on the report and record it in the history. */
-export async function saveResolutionNote(report: ReportRef, note: string, actor: Actor): Promise<string> {
-  const parsed = resolutionNoteSchema.safeParse(note);
-  if (!parsed.success) throw new Error(firstError(parsed));
-  const batch = writeBatch(db);
-  batch.update(doc(db, "fault_reports", report.id), { resolutionNote: parsed.data, updatedAt: serverTimestamp() });
-  addLog(batch, report, actor, { type: "note", note: parsed.data });
-  await batch.commit();
-  return parsed.data;
-}
-
-/**
- * All history entries of one report, oldest first. A resident may only read
- * the history of their own reports, so their query is limited to entries they
- * own; staff read the whole history.
- */
-export async function fetchTimeline(reportId: string, viewer: { uid: string; role: Role }): Promise<LogEntry[]> {
-  const filters = [where("reportId", "==", reportId)];
-  if (viewer.role === "student") filters.push(where("reportOwnerId", "==", viewer.uid));
-  const snap = await getDocs(query(collection(db, "status_log"), ...filters));
-  const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LogEntry));
-  entries.sort((a, b) => (a.timestamp?.seconds ?? 0) - (b.timestamp?.seconds ?? 0));
-  return entries;
-}
+/** Message to show for a failed request. */
+export const errorMessage = (err: unknown, fallback = "The change could not be saved. Please try again.") =>
+  err instanceof ApiError ? err.message : fallback;

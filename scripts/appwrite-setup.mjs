@@ -102,6 +102,7 @@ const TABLES = [
       { key: "createdAt", type: TablesDBIndexType.Key, columns: ["createdAt"] },
       { key: "status", type: TablesDBIndexType.Key, columns: ["status"] },
       { key: "assignedToId", type: TablesDBIndexType.Key, columns: ["assignedToId"] },
+      { key: "photoFileId", type: TablesDBIndexType.Key, columns: ["photoFileId"] },
     ],
   },
   {

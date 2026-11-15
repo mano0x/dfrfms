@@ -1,38 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  collection, addDoc, getDocs, query, where, serverTimestamp, updateDoc, doc,
-} from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
+import { canEditReport as mayEdit } from "@/lib/access";
 import { firstError, priorityForClassification, reportInputSchema, validatePhoto } from "@/lib/maintenance";
-import { logReportCreated, logReportEdited, type Actor } from "@/lib/reports";
+import {
+  createReport, editReport, errorMessage, fetchReports, formatDate, formatDateTime, photoUrl, toDate, uploadPhoto,
+  type Report,
+} from "@/lib/reports";
 import { TargetBadge, Timeline } from "@/components/Timeline";
 import {
   Alert, AppShell, CATEGORIES, Card, Detail, EmptyState, Field, FilePicker, Icon,
   LoadingScreen, PageHeader, PriorityBadge, STATUSES, STATUS_BAR, Spinner, StatGrid,
   StatusBadge, Tabs, Tag, URGENCIES, btn, categoryLabel, cx, inputCls, selectCls,
 } from "@/components/ui";
-
-type Report = {
-  id: string;
-  title: string;
-  category: string;
-  priority: string;
-  urgency?: string;
-  status: string;
-  studentId: string;
-  description: string;
-  dormitory: string;
-  roomNumber: string;
-  createdAt: any;
-  assignedTo?: string | null;
-  priorityOverridden?: boolean;
-  resolutionNote?: string;
-  photoURL?: string;
-};
 
 // Priority rule shared with the rest of the system (see lib/maintenance.ts).
 const calcPriority = priorityForClassification;
@@ -87,7 +68,6 @@ export default function StudentDashboard() {
   const [dataLoading, setDataLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
-  const [userProfile, setUserProfile] = useState<any>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Form fields
@@ -107,109 +87,60 @@ export default function StudentDashboard() {
   const [editDescription, setEditDescription] = useState("");
   const [editPhoto, setEditPhoto] = useState<File | null>(null);
 
-  useEffect(() => {
-    if (!loading && (!user || role !== "student")) router.push("/");
-  }, [user, role, loading]);
+  // Name, dormitory and room come from the signed-in user's profile.
+  const userProfile = user;
 
   useEffect(() => {
-    if (user) fetchData();
-  }, [user]);
+    if (!loading && (!user || role !== "student")) router.push("/");
+  }, [user, role, loading, router]);
 
   const fetchData = async () => {
     try {
-      setDataLoading(true);
+      // The server returns only this resident's own reports, newest first.
+      const list = await fetchReports();
+      setReports(list);
       setFetchError(null);
-
-      // 1. Fetch user profile matching the email safely
-      const uSnap = await getDocs(query(collection(db, "users"), where("email", "==", user!.email)));
-      if (!uSnap.empty) {
-        setUserProfile(uSnap.docs[0].data());
-      }
-
-      // 2. Fetch reports with a simple single-field query (NO complex index needed!)
-      const simpleQuery = query(
-        collection(db, "fault_reports"),
-        where("studentId", "==", user!.uid)
-      );
-
-      const rSnap = await getDocs(simpleQuery);
-      const fetchedReports = rSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Report));
-
-      // 3. Sort purely inside the browser's JavaScript memory
-      fetchedReports.sort((a, b) => {
-        const timeA = a.createdAt?.seconds || 0;
-        const timeB = b.createdAt?.seconds || 0;
-        return timeB - timeA; // Descending order: newest first
-      });
-
-      setReports(fetchedReports);
-    } catch (err: any) {
-      console.error("Dashboard core fetching error: ", err);
-      setFetchError("Failed to synchronize account info.");
+    } catch (err) {
+      console.error("Could not load reports:", err);
+      setFetchError("Your reports could not be loaded. Please refresh the page.");
     } finally {
       setDataLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once after sign-in; state is only set after the request finishes
+    if (user && role === "student") fetchData();
+  }, [user, role]);
 
   const handleSubmit = async () => {
     const parsed = reportInputSchema.safeParse({ title, category, urgency, description });
     if (!parsed.success) { setSuccessMsg(`❌ ${firstError(parsed)}`); return; }
     const photoError = validatePhoto(photo);
     if (photoError) { setSuccessMsg(`❌ ${photoError}`); return; }
-    const input = parsed.data;
+
     setSubmitting(true);
     setSuccessMsg("");
     try {
-      let photoURL = "";
-      if (photo) {
-        const storageRef = ref(storage, `fault-photos/${user!.uid}/${Date.now()}_${photo.name}`);
-        await uploadBytes(storageRef, photo);
-        photoURL = await getDownloadURL(storageRef);
-      }
-
-      const priority = calcPriority(input.urgency);
-
-      const created = await addDoc(collection(db, "fault_reports"), {
-        title: input.title,
-        category: input.category,
-        urgency: input.urgency,
-        priority,
-        description: input.description,
-        photoURL,
-        status: "open",
-        studentId: user!.uid,
-        studentName: userProfile?.name || user!.email,
-        dormitory: userProfile?.dormitory || "Unknown",
-        roomNumber: userProfile?.roomNumber || "Unknown",
-        assignedTo: null,
-        assignedToId: null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      // The report is saved; a failed history entry must not look like a failed submission.
-      await logReportCreated(created.id, actor()).catch((err) => console.error("History entry failed:", err));
+      // The photo is resized and uploaded first; the report then refers to it.
+      const photoFileId = photo ? await uploadPhoto(photo) : null;
+      await createReport({ ...parsed.data, photoFileId });
 
       setSuccessMsg("✓ Report submitted successfully!");
       setTitle(""); setCategory("electrical"); setUrgency("normal");
       setDescription(""); setPhoto(null);
       fetchData();
       setTimeout(() => setActiveTab("history"), 1500);
-    } catch (e) {
-      setSuccessMsg("❌ Submission failed. Please try again.");
+    } catch (err) {
+      setSuccessMsg(`❌ ${errorMessage(err, "Submission failed. Please try again.")}`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const actor = (): Actor => ({
-    uid: user!.uid,
-    name: userProfile?.name || user!.email || "Resident",
-    role: "student",
-  });
-
-  // Residents can edit only while the report is open, unassigned and not yet triaged.
+  // Shown only as a convenience; the server applies the same rule (lib/access.ts).
   const canEditReport = (report: Report) =>
-    report.status === "open" && !report.assignedTo && !report.priorityOverridden && report.studentId === user?.uid;
+    !!user && mayEdit({ id: user.uid, name: user.name, role: "student" }, report);
 
   const openReport = (report: Report) => {
     setSelectedReport(report);
@@ -233,48 +164,24 @@ export default function StudentDashboard() {
     if (!parsed.success) { setEditError(firstError(parsed)); return; }
     const photoError = validatePhoto(editPhoto);
     if (photoError) { setEditError(photoError); return; }
-    const input = parsed.data;
 
     setSavingEdit(true);
     setEditError("");
     try {
-      let photoURL = selectedReport.photoURL || "";
-      if (editPhoto) {
-        const storageRef = ref(storage, `fault-photos/${user.uid}/${Date.now()}_${editPhoto.name}`);
-        await uploadBytes(storageRef, editPhoto);
-        photoURL = await getDownloadURL(storageRef);
-      }
-
-      const changes = {
-        title: input.title,
-        category: input.category,
-        urgency: input.urgency,
-        priority: calcPriority(input.urgency),
-        description: input.description,
-        photoURL,
-        updatedAt: serverTimestamp(),
-      };
-      await updateDoc(doc(db, "fault_reports", selectedReport.id), changes);
-      await logReportEdited(selectedReport.id, actor()).catch((err) => console.error("History entry failed:", err));
-
-      const updatedReport: Report = {
-        ...selectedReport,
-        title: changes.title,
-        category: changes.category,
-        urgency: changes.urgency,
-        priority: changes.priority,
-        description: changes.description,
-        photoURL: changes.photoURL,
-      };
+      const newPhotoId = editPhoto ? await uploadPhoto(editPhoto) : null;
+      const updatedReport = await editReport(selectedReport.id, {
+        ...parsed.data,
+        ...(newPhotoId ? { photoFileId: newPhotoId } : {}),
+      });
       setReports((current) =>
         current.map((report) => report.id === selectedReport.id ? updatedReport : report)
       );
       setSelectedReport(updatedReport);
       setEditing(false);
       setEditPhoto(null);
-    } catch (error) {
-      console.error("Report update failed:", error);
-      setEditError("Could not save your changes. Please try again.");
+    } catch (err) {
+      console.error("Report update failed:", err);
+      setEditError(errorMessage(err, "Could not save your changes. Please try again."));
     } finally {
       setSavingEdit(false);
     }
@@ -504,12 +411,12 @@ export default function StudentDashboard() {
                       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
                         <Tag>{categoryLabel(r.category)}</Tag>
                         <PriorityBadge priority={r.priority} />
-                        <span className="ml-auto">{r.createdAt?.toDate?.()?.toLocaleDateString() || "—"}</span>
+                        <span className="ml-auto">{formatDate(r.createdAt)}</span>
                       </div>
                     </div>
-                    {r.photoURL && (
+                    {r.photoFileId && (
                       <img
-                        src={r.photoURL}
+                        src={photoUrl(r.photoFileId)}
                         alt=""
                         className="hidden h-20 w-20 shrink-0 rounded-lg border border-line object-cover sm:block"
                       />
@@ -619,7 +526,7 @@ export default function StudentDashboard() {
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={selectedReport.status} />
                     <PriorityBadge priority={selectedReport.priority} />
-                    <TargetBadge createdAt={selectedReport.createdAt?.toDate?.() ?? null} priority={selectedReport.priority} status={selectedReport.status} />
+                    <TargetBadge createdAt={toDate(selectedReport.createdAt)} priority={selectedReport.priority} status={selectedReport.status} />
                     <Tag>{categoryLabel(selectedReport.category)}</Tag>
                   </div>
 
@@ -630,7 +537,7 @@ export default function StudentDashboard() {
                   )}
 
                   <dl className="mt-6 grid gap-5 sm:grid-cols-2">
-                    <Detail label="Submitted">{selectedReport.createdAt?.toDate?.()?.toLocaleString() || "—"}</Detail>
+                    <Detail label="Submitted">{formatDateTime(selectedReport.createdAt)}</Detail>
                     <Detail label="Location">
                       {selectedReport.dormitory || "—"} · Room {selectedReport.roomNumber || "—"}
                     </Detail>
@@ -663,11 +570,11 @@ export default function StudentDashboard() {
                     <Timeline reportId={selectedReport.id} />
                   </div>
 
-                  {selectedReport.photoURL && (
+                  {selectedReport.photoFileId && (
                     <div className="mt-6">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Photo</p>
                       <img
-                        src={selectedReport.photoURL}
+                        src={photoUrl(selectedReport.photoFileId)}
                         alt={`Photograph for ${selectedReport.title}`}
                         className="mt-2 max-h-80 w-full rounded-xl border border-line bg-surface-2 object-contain"
                       />
