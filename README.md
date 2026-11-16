@@ -278,6 +278,21 @@ Browser (pages) --fetch /api/*--> Next.js route handlers --API key--> Appwrite
   the private bucket `dormitory-fault-photos`, and served by `/api/photos/[id]`
   only to people who may see the report.
 
+- **Security headers** (`next.config.ts`): a Content Security Policy that limits
+  scripts, connections, forms and framing to this site, plus `X-Frame-Options`,
+  `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` and HSTS.
+
+### Deployment (Vercel)
+
+1. In Vercel, **Settings -> Environment Variables**, add for Production and
+   Preview: `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID`
+   and `APPWRITE_API_KEY` (mark the key as sensitive). Redeploy.
+2. In the Appwrite console, add the site's address as a **Web platform**
+   (needed for password-reset links).
+3. Open `/api/health` on the deployed site: `{"ok":true,...}` means the server
+   is configured and reaches Appwrite. It never shows settings.
+4. To run the HTTP tests against a deployed site, set `TEST_BASE_URL`.
+
 ### Routes
 
 | Route | Method | Who | Purpose |
@@ -293,6 +308,7 @@ Browser (pages) --fetch /api/*--> Next.js route handlers --API key--> Appwrite
 | `/api/reports/[id]/history` | GET | by rule | History of one report |
 | `/api/photos` | POST | resident | Upload a photo |
 | `/api/photos/[id]` | GET | by rule | View a photo |
+| `/api/health` | GET | anyone | Deployment check (yes/no answers only) |
 
 ### Data
 
