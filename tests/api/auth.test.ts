@@ -273,6 +273,9 @@ describe("deployment checks", () => {
   it("reports a healthy, configured backend without revealing settings", async () => {
     const r = await call("/api/health");
     expect(r.status).toBe(200);
-    expect(r.data).toEqual({ ok: true, configured: true, backend: "ok" });
+    expect(r.data).toEqual({
+      ok: true, configured: true, backend: "ok",
+      settings: { NEXT_PUBLIC_APPWRITE_PROJECT_ID: "set", APPWRITE_API_KEY: "set" },
+    });
   });
 });
