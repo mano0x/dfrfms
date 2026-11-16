@@ -314,6 +314,10 @@ never be committed.
 | `npm run appwrite:setup` | Create the database, tables, indexes and bucket |
 | `npm run appwrite:verify` | Check the structure, transactions and visitor access |
 | `npm run appwrite:test-users` | Create the test accounts (`-- --remove` deletes them) |
+| `npm run migrate:export` | Read the existing Firestore data (read-only) into `migration-data/` (ignored by git) |
+| `npm run migrate:dry` | Show what the migration would copy into Appwrite; change nothing |
+| `npm run migrate:run` | Copy the data into Appwrite and verify it by reading it back (repeatable) |
+| `npm run migrate:check` | With `npm run dev` running: check that migrated accounts sign in and see the right data |
 | `npm test` | Unit tests (domain, access, authentication and image rules) |
 | `npm run test:api` | HTTP-level authentication, workflow and security tests; needs `npm run dev` running and the test accounts |
 

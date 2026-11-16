@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Firebase emulator logs
 *-debug.log
+
+# Exported Firestore data (personal data, local only)
+migration-data/
