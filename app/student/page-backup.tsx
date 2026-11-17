@@ -174,7 +174,7 @@ export default function StudentDashboard() {
       <header className="bg-gradient-to-r from-gray-900 to-gray-900/80 border-b border-gray-800/50 backdrop-blur px-6 py-5 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-white">DFRFMS</h1>
+            <h1 className="text-xl font-bold text-white">DFRMMS</h1>
             <p className="text-xs text-gray-400 mt-1">
               Student · {userProfile?.name || user?.email} • {userProfile?.dormitory || "General"} / Room {userProfile?.roomNumber || "N/A"}
             </p>
