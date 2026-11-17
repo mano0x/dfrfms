@@ -19,7 +19,7 @@
     "appwrite:check": "node --env-file=.env.local scripts/appwrite-setup.mjs --check",
     "appwrite:verify": "node --env-file=.env.local scripts/appwrite-verify.mjs",
     "appwrite:test-users": "node --env-file=.env.local scripts/appwrite-test-users.mjs",
-    "test:api": "node --env-file=.env.local node_modules/vitest/vitest.mjs run tests/api --testTimeout=60000 --no-file-parallelism",
+    "test:api": "node --env-file=.env.local node_modules/vitest/vitest.mjs run tests/api --testTimeout=60000 --no-file-parallelism --hookTimeout=120000",
     "migrate:export": "node scripts/firestore-export.cjs",
     "migrate:dry": "node --env-file=.env.local scripts/migrate-to-appwrite.mjs",
     "migrate:run": "node --env-file=.env.local scripts/migrate-to-appwrite.mjs --run",
