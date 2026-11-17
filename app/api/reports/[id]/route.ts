@@ -1,7 +1,7 @@
 import { HttpError, handle, ok, readJson } from "@/lib/server/http";
 import { requireCaller } from "@/lib/server/session";
 import {
-  assignTechnician, editReport, getReportFor, overridePriority, saveNote, setStatus,
+  assignTechnician, editReport, forDisplay, getReportFor, overridePriority, saveNote, setStatus,
 } from "@/lib/server/reports";
 
 type Context = { params: Promise<{ id: string }> };
@@ -11,7 +11,7 @@ export async function GET(request: Request, { params }: Context) {
   return handle(async () => {
     const guard = await requireCaller(request, ["student", "technician", "admin"]);
     if (guard.response) return guard.response;
-    return ok({ report: await getReportFor(guard.caller, (await params).id) });
+    return ok({ report: await forDisplay(await getReportFor(guard.caller, (await params).id)) });
   });
 }
 
@@ -35,15 +35,15 @@ export async function PATCH(request: Request, { params }: Context) {
 
     switch (body.action) {
       case "edit":
-        return ok({ report: await editReport(caller, id, body) });
+        return ok({ report: await forDisplay(await editReport(caller, id, body)) });
       case "status":
-        return ok({ report: await setStatus(caller, id, body.status) });
+        return ok({ report: await forDisplay(await setStatus(caller, id, body.status)) });
       case "assign":
-        return ok({ report: await assignTechnician(caller, id, body.technicianId ?? null) });
+        return ok({ report: await forDisplay(await assignTechnician(caller, id, body.technicianId ?? null)) });
       case "priority":
-        return ok({ report: await overridePriority(caller, id, body) });
+        return ok({ report: await forDisplay(await overridePriority(caller, id, body)) });
       case "note":
-        return ok({ report: await saveNote(caller, id, body.note) });
+        return ok({ report: await forDisplay(await saveNote(caller, id, body.note)) });
       default:
         throw new HttpError(400, "Unknown action.");
     }

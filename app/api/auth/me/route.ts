@@ -11,7 +11,9 @@ export async function GET() {
     user: {
       uid: caller.id,
       email: caller.email,
-      name: profile?.name || caller.name,
+      // The sign-in account holds the person's current name; the profile
+      // row's copy is used only if the account has no name.
+      name: caller.name !== caller.email ? caller.name : profile?.name || caller.name,
       role: caller.role,
       dormitory: profile?.dormitory ?? null,
       roomNumber: profile?.roomNumber ?? null,

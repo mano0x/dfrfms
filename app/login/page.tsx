@@ -137,7 +137,7 @@ export default function LoginPage({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className={cx(inputCls, "pl-10")}
-                  placeholder="you@example.com"
+                  placeholder="you@dfrmms.space"
                 />
               </div>
             </Field>

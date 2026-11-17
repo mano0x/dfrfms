@@ -6,6 +6,8 @@ import { firstError, newUserSchema } from "@/lib/maintenance";
 import { fail, ok, readJson } from "@/lib/server/http";
 import { requireCaller } from "@/lib/server/session";
 import { toProfile } from "@/lib/server/profiles";
+import { currentNames } from "@/lib/server/names";
+import { withCurrentName } from "@/lib/names";
 
 const optionalText = (max: number) =>
   z.string().trim().max(max).optional().nullable().transform((v) => (v ? v : null));
@@ -26,7 +28,10 @@ export async function GET(request: Request) {
     tableId: TABLES.users,
     queries: [Query.orderAsc("name"), Query.limit(500)],
   });
-  return ok({ users: rows.map(toProfile) });
+  const names = await currentNames();
+  const users = rows.map(toProfile).map((p) => withCurrentName(p, names));
+  users.sort((a, b) => a.name.localeCompare(b.name));
+  return ok({ users });
 }
 
 /**

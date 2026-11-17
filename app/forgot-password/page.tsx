@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={inputCls}
-                placeholder="you@example.com"
+                placeholder="you@dfrmms.space"
               />
             </Field>
 

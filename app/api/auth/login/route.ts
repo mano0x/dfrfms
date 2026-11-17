@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       user: {
         uid: user.$id,
         email: user.email,
-        name: profile?.name || user.name || user.email,
+        name: user.name || profile?.name || user.email,
         role,
         dormitory: profile?.dormitory ?? null,
         roomNumber: profile?.roomNumber ?? null,

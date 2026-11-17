@@ -6,7 +6,7 @@
  * the actions that the other roles must NOT be able to perform.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { call, removePhoto, removeReport, signIn } from "./helpers";
+import { call, removePhoto, removeReport, signIn, users } from "./helpers";
 
 let student1 = "", student2 = "", tech1 = "", tech2 = "", admin = "";
 const createdReports: string[] = [];
@@ -246,5 +246,70 @@ describe("fault photos", () => {
     expect((await call(`/api/photos/${photoId}`, { cookie: admin })).status).toBe(200);
     expect((await call(`/api/photos/${photoId}`, { cookie: student2 })).status).toBe(404);
     expect((await call(`/api/photos/${photoId}`)).status).toBe(401);
+  });
+});
+
+describe("names follow the sign-in account", () => {
+  // A name is edited on the sign-in account (for example in the Appwrite
+  // Console). Copies stored on profiles and reports must not hide the change.
+  const ORIGINAL = "Test Student Two";
+  const RENAMED = "Renamed In Console";
+  let reportId = "";
+
+  afterAll(async () => {
+    await users.updateName({ userId: "test-student2", name: ORIGINAL });
+    await users.updateName({ userId: "test-tech2", name: "Test Technician Two" });
+  });
+
+  it("shows a renamed account's new name everywhere, without changing stored records", async () => {
+    // A report submitted under the original name.
+    const created = await call("/api/reports", { method: "POST", cookie: student2, body: valid });
+    expect(created.status).toBe(201);
+    reportId = created.data.report.id;
+    createdReports.push(reportId);
+    expect(created.data.report.studentName).toBe(ORIGINAL);
+
+    // The account is renamed, exactly as the Appwrite Console does it.
+    await users.updateName({ userId: "test-student2", name: RENAMED });
+
+    // 1. The signed-in resident sees the new name (dashboard header).
+    expect((await call("/api/auth/me", { cookie: student2 })).data.user.name).toBe(RENAMED);
+
+    // 2. The earlier report shows the new name to the resident and to staff.
+    const own = (await call("/api/reports", { cookie: student2 })).data.reports.find((r: { id: string }) => r.id === reportId);
+    expect(own.studentName).toBe(RENAMED);
+    const seenByAdmin = (await call("/api/reports", { cookie: admin })).data.reports.find((r: { id: string }) => r.id === reportId);
+    expect(seenByAdmin.studentName).toBe(RENAMED);
+    expect((await call(`/api/reports/${reportId}`, { cookie: tech1 })).data.report.studentName).toBe(RENAMED);
+
+    // 3. The administrator's user list shows the new name.
+    const listed = (await call("/api/users", { cookie: admin })).data.users.find((u: { id: string }) => u.id === "test-student2");
+    expect(listed.name).toBe(RENAMED);
+
+    // 4. A new report is stored under the new name.
+    const second = await call("/api/reports", { method: "POST", cookie: student2, body: valid });
+    createdReports.push(second.data.report.id);
+    expect(second.data.report.studentName).toBe(RENAMED);
+
+    // 5. Nothing else about the account changed.
+    const account = await users.get({ userId: "test-student2" });
+    expect(account.labels).toEqual(["student"]);
+    expect(account.email).toBe("dfrmms.test.student2@example.com");
+    expect((await call("/api/auth/me", { cookie: student2 })).data.user).toMatchObject({ uid: "test-student2", role: "student", dormitory: "Dormitory B", roomNumber: "117" });
+  });
+
+  it("shows a renamed technician's new name on assigned reports and keeps the assignment", async () => {
+    const assigned = await patch(admin, reportId, { action: "assign", technicianId: "test-tech2" });
+    expect(assigned.data.report).toMatchObject({ assignedToId: "test-tech2", assignedTo: "Test Technician Two" });
+
+    await users.updateName({ userId: "test-tech2", name: "Technician Renamed" });
+
+    const seen = (await call(`/api/reports/${reportId}`, { cookie: admin })).data.report;
+    expect(seen).toMatchObject({ assignedToId: "test-tech2", assignedTo: "Technician Renamed" });
+    // The renamed technician can still work on the report: assignment is by account ID.
+    const resolved = await patch(tech2, reportId, { action: "status", status: "resolved" });
+    expect(resolved.status).toBe(200);
+    expect(resolved.data.report.assignedTo).toBe("Technician Renamed");
+    expect((await call("/api/auth/me", { cookie: tech2 })).data.user.name).toBe("Technician Renamed");
   });
 });

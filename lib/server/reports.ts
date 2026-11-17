@@ -17,6 +17,8 @@ import {
 } from "../maintenance";
 import { photoBelongsTo } from "../image-rules";
 import { getProfile } from "./profiles";
+import { currentNames } from "./names";
+import { withCurrentNames } from "../names";
 import { HttpError } from "./http";
 
 
@@ -151,7 +153,13 @@ export async function listReports(actor: Actor): Promise<ReportDTO[]> {
   // A resident's query is limited to their own reports in the database itself.
   if (actor.role === "student") queries.push(Query.equal("studentId", actor.id));
   const { rows } = await adminServices().tablesDB.listRows({ ...reportTable, queries });
-  return rows.map(toReport).filter((r) => canViewReport(actor, r));
+  const names = await currentNames();
+  return rows.map(toReport).filter((r) => canViewReport(actor, r)).map((r) => withCurrentNames(r, names));
+}
+
+/** A single report as sent to the pages: with the people's current names. */
+export async function forDisplay(report: ReportDTO): Promise<ReportDTO> {
+  return withCurrentNames(report, await currentNames());
 }
 
 /** The report, if it exists and the caller may see it. "Not found" is used for both cases. */
@@ -231,7 +239,9 @@ export async function createReport(actor: Actor, body: unknown): Promise<ReportD
     photoFileId,
     status: "open",
     studentId: actor.id,
-    studentName: profile?.name || actor.name,
+    // The account's own name (actor.name) is the current one; the profile
+    // row's copy is only a fallback.
+    studentName: actor.name || profile?.name || "",
     dormitory: profile?.dormitory || "Unknown",
     roomNumber: profile?.roomNumber || "Unknown",
     assignedTo: null,
@@ -282,10 +292,11 @@ export async function assignTechnician(actor: Actor, reportId: string, technicia
   let technician: { id: string; name: string } | null = null;
   if (technicianId !== null && technicianId !== "") {
     if (typeof technicianId !== "string") throw new HttpError(400, "Choose a valid technician.");
-    // The name is taken from the stored profile, and the account must really be a technician.
+    // The account must really be a technician. The name is never taken from
+    // the request: it is the technician account's current name.
     const profile = await getProfile(technicianId);
     if (!profile || profile.role !== "technician") throw new HttpError(400, "Choose a valid technician.");
-    technician = { id: profile.id, name: profile.name };
+    technician = { id: profile.id, name: (await currentNames()).get(profile.id) || profile.name };
   }
 
   const nextStatus = technician && report.status === "open" ? "in-progress" : report.status;
