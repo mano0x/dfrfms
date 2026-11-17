@@ -316,6 +316,23 @@ Database `dfrmms`: tables `users`, `fault_reports`, `status_log` (same fields
 as the Firestore collections; `photoURL` became `photoFileId`) and
 `auth_attempts`. Created by `npm run appwrite:setup` (repeatable, never deletes).
 
+### Accounts
+
+The system's own accounts use addresses on the project's domain:
+
+| Role | Sign-in address |
+| --- | --- |
+| Administrator | `admin@dfrmms.space` |
+| Technician | `technician@dfrmms.space` |
+| Student | `student@dfrmms.space` |
+
+These accounts were moved from Firebase with their original user IDs, so
+their reports, assignments and history stayed attached. On 17 November 2026
+their addresses were changed in place from the earlier `@dfrfms.com` names
+(`scripts/rename-account-emails.mjs`); IDs, roles and passwords were not
+changed. The address is a sign-in name: password-reset emails only arrive if
+the domain is set up to receive mail.
+
 ### Configuration
 
 Copy `.env.example` to `.env.local` and fill it in. `APPWRITE_API_KEY` is a
@@ -334,6 +351,9 @@ never be committed.
 | `npm run migrate:dry` | Show what the migration would copy into Appwrite; change nothing |
 | `npm run migrate:run` | Copy the data into Appwrite and verify it by reading it back (repeatable) |
 | `npm run migrate:check` | With `npm run dev` running: check that migrated accounts sign in and see the right data |
+| `npm run key:set` | Save a new API key to `.env.local` with hidden input, after testing it |
+| `npm run accounts:rename-dry` / `-run` / `-rollback` | Rename the three account addresses in place (dry run, execute, undo) |
+| `npm run accounts:check` | Check that the three accounts sign in and each role sees and is refused the right things (set `TEST_BASE_URL` for a deployed site) |
 | `npm test` | Unit tests (domain, access, authentication and image rules) |
 | `npm run test:api` | HTTP-level authentication, workflow and security tests; needs `npm run dev` running and the test accounts |
 

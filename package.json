@@ -23,7 +23,12 @@
     "migrate:export": "node scripts/firestore-export.cjs",
     "migrate:dry": "node --env-file=.env.local scripts/migrate-to-appwrite.mjs",
     "migrate:run": "node --env-file=.env.local scripts/migrate-to-appwrite.mjs --run",
-    "migrate:check": "node scripts/migrate-check.mjs"
+    "migrate:check": "node scripts/migrate-check.mjs",
+    "accounts:rename-dry": "node --env-file=.env.local scripts/rename-account-emails.mjs",
+    "accounts:rename-run": "node --env-file=.env.local scripts/rename-account-emails.mjs --run",
+    "accounts:rename-rollback": "node --env-file=.env.local scripts/rename-account-emails.mjs --rollback",
+    "key:set": "node scripts/set-api-key.mjs",
+    "accounts:check": "node scripts/accounts-signin-check.mjs"
   },
   "dependencies": {
     "firebase": "^12.15.0",
