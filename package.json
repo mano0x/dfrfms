@@ -28,7 +28,9 @@
     "accounts:rename-run": "node --env-file=.env.local scripts/rename-account-emails.mjs --run",
     "accounts:rename-rollback": "node --env-file=.env.local scripts/rename-account-emails.mjs --rollback",
     "key:set": "node scripts/set-api-key.mjs",
-    "accounts:check": "node scripts/accounts-signin-check.mjs"
+    "accounts:check": "node scripts/accounts-signin-check.mjs",
+    "names:sync-dry": "node --env-file=.env.local scripts/sync-stored-names.mjs",
+    "names:sync-run": "node --env-file=.env.local scripts/sync-stored-names.mjs --run"
   },
   "dependencies": {
     "firebase": "^12.15.0",

@@ -354,6 +354,7 @@ never be committed.
 | `npm run key:set` | Save a new API key to `.env.local` with hidden input, after testing it |
 | `npm run accounts:rename-dry` / `-run` / `-rollback` | Rename the three account addresses in place (dry run, execute, undo) |
 | `npm run accounts:check` | Check that the three accounts sign in and each role sees and is refused the right things (set `TEST_BASE_URL` for a deployed site) |
+| `npm run names:sync-dry` / `names:sync-run` | List, or update, stored copies of people's names that differ from their sign-in account (the site already shows the account's name) |
 | `npm test` | Unit tests (domain, access, authentication and image rules) |
 | `npm run test:api` | HTTP-level authentication, workflow and security tests; needs `npm run dev` running and the test accounts |
 
