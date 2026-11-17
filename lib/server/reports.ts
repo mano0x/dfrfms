@@ -20,6 +20,7 @@ import { getProfile } from "./profiles";
 import { currentNames } from "./names";
 import { withCurrentNames } from "../names";
 import { HttpError } from "./http";
+import { inTransaction } from "./transaction";
 
 
 export type ReportDTO = {
@@ -96,22 +97,6 @@ const toHistory = (row: any): HistoryDTO => ({
 
 const reportTable = { databaseId: DATABASE_ID, tableId: TABLES.reports };
 const historyTable = { databaseId: DATABASE_ID, tableId: TABLES.history };
-
-/**
- * Run `work` inside a database transaction: either every write in it is
- * saved, or none is. This keeps a report and its history from disagreeing.
- */
-async function inTransaction(work: (transactionId: string) => Promise<void>) {
-  const { tablesDB } = adminServices();
-  const tx = await tablesDB.createTransaction();
-  try {
-    await work(tx.$id);
-    await tablesDB.updateTransaction({ transactionId: tx.$id, commit: true });
-  } catch (err) {
-    await tablesDB.updateTransaction({ transactionId: tx.$id, rollback: true }).catch(() => {});
-    throw err;
-  }
-}
 
 function logRow(transactionId: string, report: { id: string; studentId: string }, actor: Actor, entry: LogInput, at: string) {
   return adminServices().tablesDB.createRow({

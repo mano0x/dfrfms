@@ -44,6 +44,10 @@ const CATEGORIES = ["electrical", "plumbing", "hvac", "structural", "internet", 
 const CLASSIFICATIONS = ["normal", "urgent", "emergency"];
 const PRIORITIES = ["critical", "high", "medium", "low"];
 const STATUSES = ["open", "in-progress", "resolved", "closed"];
+const NOTICE_CATEGORIES = ["noise", "shared-space", "cleanliness", "other"];
+const NOTICE_AREAS = ["corridor", "kitchen", "bathroom", "laundry", "common-room", "stairwell", "outdoor", "other"];
+const NOTICE_STATUSES = ["submitted", "under-review", "resolved", "closed"];
+const MODERATION_ACTIONS = ["status", "publish", "unpublish", "remove", "response", "identity-viewed"];
 const LOG_TYPES = ["created", "edited", "status", "assignment", "priority", "note"];
 
 const text = (key, size, required = false) => ({ kind: "varchar", key, size, required });
@@ -135,6 +139,69 @@ const TABLES = [
       date("lockedUntil"),
     ],
     indexes: [],
+  },
+  {
+    // Confidential notices between residents. senderId is never sent to
+    // other residents; an administrator sees it only through a logged action.
+    id: "neighbour_notices",
+    name: "Neighbour notices",
+    columns: [
+      text("senderId", 36, true),
+      choice("category", NOTICE_CATEGORIES, true),
+      text("subject", 120, true),
+      text("description", 1500, true),
+      text("dormitory", 60, true),
+      choice("area", NOTICE_AREAS),
+      choice("status", NOTICE_STATUSES, true),
+      flag("published"),
+      flag("removed"),
+      text("removedReason", 300),
+      text("adminResponse", 500),
+      date("createdAt", true),
+      date("updatedAt", true),
+    ],
+    indexes: [
+      { key: "senderId", type: TablesDBIndexType.Key, columns: ["senderId"] },
+      { key: "status", type: TablesDBIndexType.Key, columns: ["status"] },
+      { key: "dormitory", type: TablesDBIndexType.Key, columns: ["dormitory"] },
+      { key: "createdAt", type: TablesDBIndexType.Key, columns: ["createdAt"] },
+    ],
+  },
+  {
+    // What administrators did with a notice. Rows are only ever added.
+    id: "neighbour_moderation_actions",
+    name: "Neighbour notice moderation log",
+    columns: [
+      text("noticeId", 36, true),
+      choice("action", MODERATION_ACTIONS, true),
+      text("from", 80),
+      text("to", 80),
+      text("reason", 500),
+      text("adminId", 36, true),
+      text("adminName", 320),
+      date("timestamp", true),
+    ],
+    indexes: [
+      { key: "noticeId", type: TablesDBIndexType.Key, columns: ["noticeId"] },
+    ],
+  },
+  {
+    // In-app notifications, one row per recipient.
+    id: "notifications",
+    name: "Notifications",
+    columns: [
+      text("userId", 36, true),
+      text("type", 40, true),
+      text("title", 120, true),
+      text("body", 300),
+      text("link", 200),
+      flag("read"),
+      date("createdAt", true),
+    ],
+    indexes: [
+      { key: "userId", type: TablesDBIndexType.Key, columns: ["userId"] },
+      { key: "createdAt", type: TablesDBIndexType.Key, columns: ["createdAt"] },
+    ],
   },
 ];
 

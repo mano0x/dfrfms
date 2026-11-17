@@ -358,6 +358,25 @@ never be committed.
 | `npm test` | Unit tests (domain, access, authentication and image rules) |
 | `npm run test:api` | HTTP-level authentication, workflow and security tests; needs `npm run dev` running and the test accounts |
 
+## Confidential Neighbour Notices (branch `feature/community-modules`)
+
+Not yet merged into `main` or deployed. Full description, requirements,
+database design, security analysis and test results: [docs/neighbour-notices.md](docs/neighbour-notices.md).
+
+- A resident sends a notice about a problem in a shared area (`/student/neighbour`).
+  Other residents never see who sent it; technicians have no access.
+- An administrator reviews each notice (`/admin/neighbour`), may publish it to the
+  residents of the same dormitory, respond, or remove it with a reason. Every action
+  is logged. Viewing the sender requires a reason and is logged as well.
+- In-app notifications (`/notifications`) tell the sender what happened to a notice
+  and tell administrators that a new one arrived.
+- Routes: `/api/neighbour`, `/api/neighbour/[id]`, `/api/neighbour/[id]/reveal`,
+  `/api/neighbour/[id]/actions`, `/api/notifications`.
+- Tables (created by `npm run appwrite:setup`): `neighbour_notices`,
+  `neighbour_moderation_actions`, `notifications`.
+- Tests: `tests/unit/neighbour.test.ts`, `tests/api/neighbour.test.ts`
+  (the API tests need `npm run appwrite:test-users`, which now creates 7 accounts).
+
 ## Security Rules (Firebase version)
 
 Access is enforced on the server by `firestore.rules` and `storage.rules`

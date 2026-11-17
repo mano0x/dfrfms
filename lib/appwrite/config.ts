@@ -17,6 +17,9 @@ export const TABLES = {
   reports: "fault_reports",
   history: "status_log",
   loginAttempts: "auth_attempts",
+  notices: "neighbour_notices",
+  moderation: "neighbour_moderation_actions",
+  notifications: "notifications",
 } as const;
 
 export const PHOTO_BUCKET_ID = "dormitory-fault-photos";
