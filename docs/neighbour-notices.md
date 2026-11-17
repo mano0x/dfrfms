@@ -239,7 +239,7 @@ Not tested: behaviour under concurrent load; more than 500 notices
 - Paging of long lists.
 - Atomic rate limit.
 - Notifications for fault-report events (the notification table and page are
-  general, but only the neighbour module writes to them).
+  general; the neighbour and free-stuff modules write to them, fault reports do not).
 - Replies or discussion between residents (deliberately excluded to avoid
   conflict between neighbours).
 - Lithuanian interface text.

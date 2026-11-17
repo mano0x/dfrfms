@@ -375,7 +375,28 @@ database design, security analysis and test results: [docs/neighbour-notices.md]
 - Tables (created by `npm run appwrite:setup`): `neighbour_notices`,
   `neighbour_moderation_actions`, `notifications`.
 - Tests: `tests/unit/neighbour.test.ts`, `tests/api/neighbour.test.ts`
-  (the API tests need `npm run appwrite:test-users`, which now creates 7 accounts).
+  (the API tests need `npm run appwrite:test-users`, which creates the test accounts).
+
+## Free Stuff and Community Sharing (branch `feature/community-modules`)
+
+Not yet merged into `main` or deployed. Full description, requirements,
+reservation life cycle, database design, security analysis and test results:
+[docs/free-stuff.md](docs/free-stuff.md).
+
+- A resident offers an item for free to the residents of the same dormitory
+  (`/student/free`), with up to three photos. No prices or payments.
+- Another resident reserves it for 24 hours (`FREE_RESERVATION_HOURS` on the server
+  changes this). Of several simultaneous attempts exactly one succeeds: a lock row
+  whose ID is the listing ID decides it.
+- The owner confirms the handover. Reservations that run out are released the next
+  time the item is read.
+- An administrator sees all items and reports (`/admin/free`) and can remove an item
+  with a reason. Technicians have no access.
+- Routes: `/api/free`, `/api/free/[id]`, `/api/free/photos`, `/api/free/photos/[id]`.
+- Tables: `free_listings`, `free_reservations`, `free_reservation_locks`,
+  `free_listing_reports`; bucket `free-item-photos`.
+- Tests: `tests/unit/sharing.test.ts`, `tests/api/sharing.test.ts`
+  (`npm run appwrite:test-users` now creates 8 accounts).
 
 ## Security Rules (Firebase version)
 

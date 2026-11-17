@@ -6,7 +6,7 @@
  * the actions that the other roles must NOT be able to perform.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { call, removePhoto, removeReport, signIn, users } from "./helpers";
+import { call, removePhoto, removeReport, removeTestReports, signIn, users } from "./helpers";
 
 let student1 = "", student2 = "", tech1 = "", tech2 = "", admin = "";
 const createdReports: string[] = [];
@@ -32,6 +32,7 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const id of createdReports) await removeReport(id);
   for (const id of createdPhotos) await removePhoto(id);
+  await removeTestReports();
 });
 
 describe("access without signing in", () => {

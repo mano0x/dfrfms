@@ -20,9 +20,14 @@ export const TABLES = {
   notices: "neighbour_notices",
   moderation: "neighbour_moderation_actions",
   notifications: "notifications",
+  listings: "free_listings",
+  reservations: "free_reservations",
+  reservationLocks: "free_reservation_locks",
+  listingReports: "free_listing_reports",
 } as const;
 
 export const PHOTO_BUCKET_ID = "dormitory-fault-photos";
+export const FREE_PHOTO_BUCKET_ID = "free-item-photos";
 
 /** Roles are stored as Appwrite user labels, which only the server can set. */
 export const ROLE_LABELS = ["student", "technician", "admin"] as const;

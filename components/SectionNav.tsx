@@ -10,11 +10,13 @@ const LINKS: Record<Role, { href: string; label: string }[]> = {
   student: [
     { href: "/student", label: "Fault reports" },
     { href: "/student/neighbour", label: "Neighbour notices" },
+    { href: "/student/free", label: "Free stuff" },
     { href: "/notifications", label: "Notifications" },
   ],
   admin: [
     { href: "/admin", label: "Fault reports" },
     { href: "/admin/neighbour", label: "Neighbour notices" },
+    { href: "/admin/free", label: "Free stuff" },
     { href: "/notifications", label: "Notifications" },
   ],
   // Technicians work only with fault reports, so they have a single section.

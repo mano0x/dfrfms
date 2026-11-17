@@ -53,3 +53,16 @@ export async function removeReport(reportId: string) {
 
 export const removePhoto = (fileId: string) =>
   storage.deleteFile({ bucketId: "dormitory-fault-photos", fileId }).catch(() => {});
+
+/**
+ * Remove every report that belongs to a test account. Run after the report
+ * tests as a safety net: a test that fails half-way may leave a report that
+ * was never noted for removal.
+ */
+export async function removeTestReports() {
+  const { rows } = await tablesDB.listRows({
+    databaseId: "dfrmms", tableId: "fault_reports",
+    queries: [Query.equal("studentId", ["test-student1", "test-student2", "test-student3", "test-student4", "test-lockout"]), Query.limit(200)],
+  });
+  for (const row of rows) await removeReport(row.$id);
+}

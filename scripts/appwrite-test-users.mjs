@@ -28,6 +28,8 @@ export const TEST_USERS = [
   { id: "test-student2", email: "dfrmms.test.student2@example.com", name: "Test Student Two", role: "student", dormitory: "Dormitory B", roomNumber: "117" },
   // A second resident of Dormitory A, for the neighbour-notice tests.
   { id: "test-student3", email: "dfrmms.test.student3@example.com", name: "Test Student Three", role: "student", dormitory: "Dormitory A", roomNumber: "310" },
+  // A third resident of Dormitory A, so two residents can compete for one free item.
+  { id: "test-student4", email: "dfrmms.test.student4@example.com", name: "Test Student Four", role: "student", dormitory: "Dormitory A", roomNumber: "412" },
   // Used only by the lockout test, so the other accounts are never locked.
   { id: "test-lockout", email: "dfrmms.test.lockout@example.com", name: "Test Lockout", role: "student", dormitory: "Dormitory A", roomNumber: "001" },
 ];

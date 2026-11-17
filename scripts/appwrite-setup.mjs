@@ -38,6 +38,7 @@ const storage = new Storage(client);
 
 export const DATABASE_ID = "dfrmms";
 export const BUCKET_ID = "dormitory-fault-photos";
+export const FREE_BUCKET_ID = "free-item-photos";
 
 const ROLES = ["student", "technician", "admin"];
 const CATEGORIES = ["electrical", "plumbing", "hvac", "structural", "internet", "furniture", "other"];
@@ -48,6 +49,10 @@ const NOTICE_CATEGORIES = ["noise", "shared-space", "cleanliness", "other"];
 const NOTICE_AREAS = ["corridor", "kitchen", "bathroom", "laundry", "common-room", "stairwell", "outdoor", "other"];
 const NOTICE_STATUSES = ["submitted", "under-review", "resolved", "closed"];
 const MODERATION_ACTIONS = ["status", "publish", "unpublish", "remove", "response", "identity-viewed"];
+const ITEM_CATEGORIES = ["books", "electronics", "furniture", "kitchenware", "clothing", "household", "other"];
+const ITEM_CONDITIONS = ["new", "good", "used"];
+const ITEM_STATUSES = ["available", "reserved", "collected", "removed"];
+const RESERVATION_STATUSES = ["active", "cancelled", "expired", "collected"];
 const LOG_TYPES = ["created", "edited", "status", "assignment", "priority", "note"];
 
 const text = (key, size, required = false) => ({ kind: "varchar", key, size, required });
@@ -203,6 +208,88 @@ const TABLES = [
       { key: "createdAt", type: TablesDBIndexType.Key, columns: ["createdAt"] },
     ],
   },
+  {
+    // Free items offered by residents. reservedById is set only while an
+    // item is reserved; the lock table below decides who gets it.
+    id: "free_listings",
+    name: "Free item listings",
+    columns: [
+      text("ownerId", 36, true),
+      text("title", 100, true),
+      text("description", 1000, true),
+      choice("category", ITEM_CATEGORIES, true),
+      choice("condition", ITEM_CONDITIONS, true),
+      text("location", 120, true),
+      text("collectionTime", 120),
+      text("dormitory", 60, true),
+      text("photoIds", 120),
+      choice("status", ITEM_STATUSES, true),
+      text("removedBy", 10),
+      text("removedReason", 300),
+      date("expiresAt"),
+      text("reservedById", 36),
+      text("reservationId", 36),
+      date("reservationExpiresAt"),
+      flag("expiryWarned"),
+      date("collectedAt"),
+      date("createdAt", true),
+      date("updatedAt", true),
+    ],
+    indexes: [
+      { key: "ownerId", type: TablesDBIndexType.Key, columns: ["ownerId"] },
+      { key: "dormitory", type: TablesDBIndexType.Key, columns: ["dormitory"] },
+      { key: "status", type: TablesDBIndexType.Key, columns: ["status"] },
+      { key: "reservedById", type: TablesDBIndexType.Key, columns: ["reservedById"] },
+      { key: "createdAt", type: TablesDBIndexType.Key, columns: ["createdAt"] },
+    ],
+  },
+  {
+    // One row per reservation ever made, kept as the record of what happened.
+    id: "free_reservations",
+    name: "Free item reservations",
+    columns: [
+      text("listingId", 36, true),
+      text("reserverId", 36, true),
+      text("ownerId", 36, true),
+      choice("status", RESERVATION_STATUSES, true),
+      date("createdAt", true),
+      date("expiresAt", true),
+      date("endedAt"),
+      text("endedBy", 10),
+    ],
+    indexes: [
+      { key: "listingId", type: TablesDBIndexType.Key, columns: ["listingId"] },
+      { key: "reserverId", type: TablesDBIndexType.Key, columns: ["reserverId"] },
+      { key: "status", type: TablesDBIndexType.Key, columns: ["status"] },
+    ],
+  },
+  {
+    // The row ID is the listing ID. The database refuses a second row with
+    // the same ID, so only one of several simultaneous reservations can win.
+    id: "free_reservation_locks",
+    name: "Free item reservation locks",
+    columns: [
+      text("reserverId", 36, true),
+      date("createdAt", true),
+    ],
+    indexes: [],
+  },
+  {
+    // Residents' reports of listings that break the rules.
+    id: "free_listing_reports",
+    name: "Reported free item listings",
+    columns: [
+      text("listingId", 36, true),
+      text("reporterId", 36, true),
+      text("reason", 300, true),
+      flag("resolved"),
+      date("createdAt", true),
+    ],
+    indexes: [
+      { key: "listingId", type: TablesDBIndexType.Key, columns: ["listingId"] },
+      { key: "reporterId", type: TablesDBIndexType.Key, columns: ["reporterId"] },
+    ],
+  },
 ];
 
 const BUCKET = {
@@ -211,6 +298,19 @@ const BUCKET = {
   // Private bucket: only residents may upload; who may view each photo is set
   // per file by the server (fileSecurity).
   permissions: [Permission.create(Role.label("student"))],
+  fileSecurity: true,
+  enabled: true,
+  maximumFileSize: 5 * 1024 * 1024,
+  allowedFileExtensions: ["jpg", "jpeg", "png", "webp"],
+  encryption: true,
+};
+
+// Photos of free items. No permissions at all: the server uploads and serves
+// every file itself (see app/api/free/photos).
+const FREE_BUCKET = {
+  bucketId: FREE_BUCKET_ID,
+  name: "Free item photos",
+  permissions: [],
   fileSecurity: true,
   enabled: true,
   maximumFileSize: 5 * 1024 * 1024,
@@ -316,6 +416,11 @@ try {
     `bucket ${BUCKET_ID}`,
     () => storage.getBucket({ bucketId: BUCKET_ID }),
     () => storage.createBucket(BUCKET)
+  );
+  await ensure(
+    `bucket ${FREE_BUCKET_ID}`,
+    () => storage.getBucket({ bucketId: FREE_BUCKET_ID }),
+    () => storage.createBucket(FREE_BUCKET)
   );
 } catch (err) {
   report.errors.push(`${err?.type ?? err?.name ?? "error"}: ${err?.message ?? err}`);
