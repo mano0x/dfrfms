@@ -1,0 +1,11 @@
+# Settings for the secret scan in CI (gitleaks).
+# The default rules apply. One path in the Git history is excluded:
+# lib/firebase.ts held the Firebase *web* configuration, which Firebase
+# publishes to every browser by design and which is not a credential.
+# The file was removed from the project; only old commits still contain it.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public Firebase web configuration in old commits"
+paths = ['''lib/firebase\.ts''']

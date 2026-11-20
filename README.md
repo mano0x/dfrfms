@@ -1,552 +1,230 @@
 # DFRMMS
 
-Dormitory Fault Reporting and Maintenance Management System (DFRMMS) is a role-based web app for reporting dormitory issues, tracking repairs, and coordinating work between students, technicians, and administrators.
-
-The app is built with Next.js App Router, React, TypeScript, Tailwind CSS, and Firebase. Authentication, database reads/writes, and file uploads are handled by Firebase services directly from the client.
-
-## What This App Does
-
-DFRMMS lets students submit fault reports, technicians work through assigned and unassigned issues, and admins manage the overall workflow. The core idea is simple: a problem is reported once, then tracked until it is resolved.
-
-## Main Roles
-
-### Student
-
-Students can:
-
-- Sign in with email and password.
-- Submit new fault reports.
-- Attach an optional photo of the issue.
-- See a personal history of their own reports.
-- Filter their reports by status.
-- Review the calculated priority assigned to each report.
-
-### Technician
-
-Technicians can:
-
-- Sign in and open the technician dashboard.
-- View reports assigned to them.
-- Switch between assigned reports and all reports.
-- Filter reports by status.
-- Expand a report to see the full description and photo.
-- Update a report’s status.
-- Add resolution notes.
-- Save a resolution note entry to the `status_log` collection.
-
-### Admin
-
-Admins can:
-
-- Review all submitted fault reports.
-- Search and filter reports by title, student, room, status, and priority.
-- Change a report’s status.
-- Assign a technician to a report.
-- View all registered users.
-- Create new users for students, technicians, or admins.
-
-## Tech Stack
-
-- Next.js 16 App Router
-- React 19
-- TypeScript
-- Tailwind CSS 4
-- Firebase Authentication
-- Cloud Firestore
-- Firebase Storage
-- Zod is included in dependencies for validation use cases
-
-## App Architecture
-
-The app is structured as a small role-based workspace:
-
-- `app/layout.tsx` wraps the entire app with the authentication context provider and loads the Geist font.
-- `lib/AuthContext.tsx` listens to Firebase auth state and looks up the current user role in Firestore.
-- `lib/firebase.ts` initializes the Firebase client using environment variables.
-- `app/login/page.tsx` handles sign-in and redirects users based on their role.
-- `app/student/page.tsx` contains the student report submission and history experience.
-- `app/technician/page.tsx` contains the technician work queue and resolution tools.
-- `app/admin/page.tsx` contains the admin console for report and user management.
-
-There is no traditional API layer in this project. The browser talks directly to Firebase services.
-
-## Data Model
-
-The app expects these Firestore collections.
-
-### `users`
-
-Used for authentication profile lookup and role routing.
-
-Common fields:
-
-- `name`
-- `email`
-- `role` with values like `student`, `technician`, or `admin`
-- `dormitory` for students
-- `roomNumber` for students
-- `specialization` for technicians
-- `createdAt`
-
-### `fault_reports`
-
-Stores each maintenance issue reported by students.
-
-Common fields:
-
-- `title`
-- `category`
-- `urgency`
-- `priority`
-- `description`
-- `photoURL`
-- `status`
-- `studentId`
-- `studentName`
-- `dormitory`
-- `roomNumber`
-- `assignedTo`
-- `createdAt`
-- `updatedAt`
-- `resolutionNote`
-
-### `status_log`
-
-Stores technician note activity when a resolution note is saved.
-
-Common fields:
-
-- `reportId`
-- `technicianName`
-- `note`
-- `timestamp`
-
-## Firebase Services Used
-
-### Authentication
-
-Firebase Authentication is used for email and password sign-in. After login, the app reads the matching user record from Firestore and routes the user to the correct dashboard.
-
-### Firestore
-
-Firestore is the primary database for user profiles and fault reports.
-
-### Storage
-
-Firebase Storage stores uploaded report photos. The current upload path format is:
-
-- `fault-photos/{userId}/{timestamp}_{filename}`
-
-## Role Flow
-
-1. A user signs in on the login page.
-2. The app authenticates the user through Firebase Auth.
-3. The app fetches the user’s record from Firestore.
-4. The user’s `role` determines which route they are redirected to.
-5. The dashboard only renders if the role matches the route.
-
-This means the app relies on client-side route checks plus the stored role in Firestore.
-
-## Report Flow
-
-### Student report submission
-
-1. The student opens the submit form.
-2. The student enters a title, category, maintenance classification, and description.
-3. The student may upload a photo.
-4. The app calculates a priority value from the maintenance classification.
-5. The report is written to Firestore with status `open`.
-6. The report appears in the student’s history tab.
-
-### Technician handling
-
-1. The technician opens the dashboard.
-2. The technician views assigned or all reports.
-3. The technician updates status as work progresses.
-4. The technician may add a resolution note.
-5. The note is saved to the report and logged in `status_log`.
-
-### Admin management
-
-1. The admin opens the admin dashboard.
-2. The admin filters and reviews all reports.
-3. The admin can assign a technician to a report.
-4. The admin can update report status.
-5. The admin can create new user records.
-
-## Business Rules Implemented In Code
-
-- Students can only work with their own report history.
-- Technicians are redirected away from student/admin views if their role does not match.
-- Admins are redirected away from non-admin views if their role does not match.
-- Report priority is derived from the maintenance classification (stored in the `urgency` field):
-  - Routine Maintenance (`normal`) → `low`
-  - Priority Maintenance (`urgent`) → `high`
-  - Emergency Maintenance (`emergency`) → `critical`
-
-## Maintenance Workflow (bachelor's thesis extension)
-
-The coursework version of this project is tagged `coursework-baseline`. The
-functionality below was added afterwards.
-
-### Status workflow
-
-A report moves `open` → `in-progress` → `resolved` → `closed`. Allowed changes depend on the role:
-
-| Role | Allowed status changes |
-| --- | --- |
-| Technician (assigned reports only) | open → in-progress, in-progress → resolved, resolved → in-progress |
-| Administrator | the above, plus close from any status, return in-progress → open, reopen closed → open |
-
-### Assignment
-
-Reports store the assigned technician's account ID (`assignedToId`) together
-with the name (`assignedTo`) for display. Reports assigned before this field
-existed are matched by name. Assigning an open report moves it to `in-progress`.
-
-### Triage
-
-The initial priority comes from the resident's classification. An administrator
-can override it with a recorded reason (`priorityOverridden`, `priorityReason`).
-A resident can no longer edit a report once it has been triaged or assigned.
-
-### Target resolution times
-
-| Priority | Target |
-| --- | --- |
-| Critical | 4 hours |
-| High | 24 hours |
-| Medium | 72 hours |
-| Low | 168 hours (7 days) |
-
-An active report past its target is shown as overdue. The targets are defined in
-`lib/maintenance.ts` (`TARGET_HOURS`).
-
-### History (audit trail)
-
-Every change is written to `status_log` in the same batch as the change itself.
-Entry fields: `reportId`, `type` (`created`, `edited`, `status`, `assignment`,
-`priority`, `note`), `from`, `to`, `note`, `actorId`, `actorName`, `actorRole`,
-`timestamp`. The history is shown as a timeline to residents, technicians and
-administrators.
-
-### Input validation
-
-Report input, resolution notes, priority overrides and new users are validated
-with Zod schemas in `lib/maintenance.ts`. Photos must be JPG, PNG or WebP and at
-most 5 MB.
-
-### Code structure
-
-- `lib/maintenance.ts` — domain rules (priority, status workflow, targets, validation); no Firebase or React.
-- `lib/reports.ts` — data operations that change a report and write its history entry atomically.
-- `components/Timeline.tsx` — history timeline and target-time indicator.
-- `tests/maintenance.test.ts` — unit tests of the domain rules.
-
-## Appwrite Backend (branch `appwrite-migration`)
-
-On this branch the application uses Appwrite (Auth, Databases, Storage) instead
-of Firebase. The Firebase sections below describe the version that is still
-live on `main` until the migration is verified.
-
-### Architecture
-
-```text
-Browser (pages) --fetch /api/*--> Next.js route handlers --API key--> Appwrite
-                 httpOnly cookie    authorise, validate, write          (Frankfurt)
+Dormitory Fault Reporting and Maintenance Management System. A web
+application in which dormitory residents report faults, technicians repair
+them and administrators manage the work. Around that core it has in-app
+notifications, confidential neighbour notices and a free-item exchange.
+
+This file is the developer guide: how the code is organised, how to run it
+and how to test it. What each module does and why is in `docs/`.
+
+| Document | Content |
+|----------|---------|
+| [docs/build-plan.md](docs/build-plan.md) | What is being built next, decisions taken and open |
+| [docs/requirements.md](docs/requirements.md) | Every requirement ID and its state |
+| [docs/neighbour-notices.md](docs/neighbour-notices.md) | Confidential neighbour notices and notifications |
+| [docs/free-stuff.md](docs/free-stuff.md) | Free-item exchange and the reservation lock |
+| [docs/ai-use-log.md](docs/ai-use-log.md) | Record of AI use, for the declaration |
+
+## Stack
+
+Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, Zod 4,
+Appwrite Cloud (Frankfurt) through the server SDK `node-appwrite`, Vitest,
+Node 24. Hosted on Vercel.
+
+`AGENTS.md` matters: this Next.js version differs from older ones. Read the
+guide under `node_modules/next/dist/docs/` before using a Next.js API.
+
+## Architecture in one picture
+
+```
+Browser (pages, no secrets)
+   |  fetch to this site only, session in an httpOnly cookie
+   v
+Route handlers  app/api/**/route.ts     who is calling? which role? same origin?
+   v
+Server operations  lib/server/*.ts      authorise, validate, write in a transaction
+   |            \
+   |             uses pure rules  lib/*.ts   (no Appwrite, no Next.js, unit-tested)
+   v
+Appwrite (database, storage, accounts)  reached only with the server's API key
 ```
 
-- **The browser never talks to Appwrite.** It calls the application's own
-  routes under `/api`. The Appwrite tables and the photo bucket grant no access
-  to browsers at all; only the server's API key can reach them.
-- **Session:** after sign-in the Appwrite session secret is kept in an
-  `httpOnly`, `SameSite=Strict` cookie (`Secure` in production). Page scripts
-  cannot read it. Sign-out revokes the session in Appwrite.
-- **Roles** are Appwrite account labels (`student`, `technician`, `admin`),
-  which only the server can set. A role sent by the browser is never trusted.
-- **Authorisation** rules are pure functions in `lib/access.ts`; every route
-  applies them on the server. The pages use the same functions only to decide
-  which controls to show.
-- **Atomic writes:** a report change and its history entry are written in one
-  Appwrite transaction (`lib/server/reports.ts`).
-- **Brute-force protection:** 5 failed sign-ins in 15 minutes lock the address
-  for 15 minutes (`lib/auth-rules.ts`, table `auth_attempts`).
-- **Cross-site requests:** every state-changing route requires the request to
-  come from this site (Origin check) in addition to the SameSite cookie.
-- **Photos:** resized in the browser (this also removes hidden data such as GPS
-  position), checked on the server by content rather than file name, stored in
-  the private bucket `dormitory-fault-photos`, and served by `/api/photos/[id]`
-  only to people who may see the report.
+The rules that follow from it:
 
-- **Security headers** (`next.config.ts`): a Content Security Policy that limits
-  scripts, connections, forms and framing to this site, plus `X-Frame-Options`,
-  `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` and HSTS.
+1. **The browser never talks to Appwrite.** Pages call this application's own
+   `/api` routes. Only the server holds the API key. Tables and buckets grant
+   no permissions.
+2. **Every route identifies its caller** with `requireCaller(request, roles)`.
+   The session secret lives in an httpOnly, `SameSite=Strict` cookie
+   (`Secure` in production). The role is read from the account's labels in
+   Appwrite, which only the server can set. Requests that change data must
+   come from this site's own origin.
+3. **Who the caller is, their role, dormitory and ownership come from the
+   server's records**, never from a request body.
+4. **Business rules are pure functions** with unit tests. Pages reuse them
+   only to decide what to show; the server decides.
+5. **Writes that belong together share one transaction** (`inTransaction()`),
+   for example a report change and its history entry.
+6. **A response holds only what its viewer needs.** No account IDs or e-mail
+   addresses of other people. Something the caller may not see is answered
+   with "not found".
 
-### Deployment (Vercel)
+## Where things are
 
-1. In Vercel, **Settings -> Environment Variables**, add for Production and
-   Preview: `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID`
-   and `APPWRITE_API_KEY` (mark the key as sensitive). Redeploy.
-2. In the Appwrite console, add the site's address as a **Web platform**
-   (needed for password-reset links).
-3. Open `/api/health` on the deployed site: `{"ok":true,...}` means the server
-   is configured and reaches Appwrite. It never shows settings.
-4. To run the HTTP tests against a deployed site, set `TEST_BASE_URL`.
+| Layer | Files | Rule |
+|-------|-------|------|
+| Pure rules | `lib/maintenance.ts`, `lib/access.ts`, `lib/auth-rules.ts`, `lib/neighbour.ts`, `lib/sharing.ts`, `lib/image-rules.ts`, `lib/names.ts` | Schemas, state machines, permissions, limits. No Appwrite, Next.js or React. |
+| Server operations | `lib/server/*.ts` | Authorise with the pure rules, validate, then write. |
+| Appwrite access | `lib/appwrite/server.ts`, IDs in `lib/appwrite/config.ts` | The only place a client for Appwrite is created. |
+| Route handlers | `app/api/**/route.ts` | Thin: `requireCaller`, `readJson`, one server operation, `ok` or `fail`, inside `handle`. |
+| Browser data layer | `lib/api.ts`, `lib/reports.ts`, `lib/community.ts`, `lib/free.ts`, `lib/AuthContext.tsx` | What pages call. |
+| Pages and components | `app/**/page.tsx`, `components/` | Black, white and grey design; shared kit in `components/ui.tsx`. |
+| Schema | `scripts/appwrite-setup.mjs` | Repeatable; only adds what is missing. |
+| Tests | `tests/unit`, `tests/api` | See "Testing". |
+
+### Roles
+
+`student` (a resident), `technician`, `admin`. Stored as labels on the
+Appwrite account. An account without one of these labels cannot sign in.
 
 ### Routes
 
-| Route | Method | Who | Purpose |
-| --- | --- | --- | --- |
-| `/api/auth/login` | POST | anyone | Sign in under a chosen role |
-| `/api/auth/logout` | POST | signed in | Sign out and revoke the session |
-| `/api/auth/me` | GET | anyone | Who is signed in |
-| `/api/auth/recovery` | POST, PUT | anyone | Request / complete a password reset |
-| `/api/users` | GET, POST | administrator | List users; create account, role and profile |
-| `/api/reports` | GET | signed in | Own reports (resident) or all reports (staff) |
-| `/api/reports` | POST | resident | Submit a report |
-| `/api/reports/[id]` | GET, PATCH | by rule | View; edit, status, assign, priority, note |
-| `/api/reports/[id]/history` | GET | by rule | History of one report |
-| `/api/photos` | POST | resident | Upload a photo |
-| `/api/photos/[id]` | GET | by rule | View a photo |
-| `/api/health` | GET | anyone | Deployment check (yes/no answers only) |
+| Route | Methods | Who |
+|-------|---------|-----|
+| `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/recovery` | POST, GET, PUT | anyone (sign-in itself), signed-in users |
+| `/api/users` | GET, POST | administrator |
+| `/api/reports`, `/api/reports/[id]`, `/api/reports/[id]/history` | GET, POST, PATCH | resident (own reports), technician, administrator |
+| `/api/photos`, `/api/photos/[id]` | POST, GET | resident uploads; viewers of the report read |
+| `/api/neighbour`, `/api/neighbour/[id]`, `/api/neighbour/[id]/reveal`, `/api/neighbour/[id]/actions` | GET, POST, PATCH | resident, administrator; never technician |
+| `/api/free`, `/api/free/[id]`, `/api/free/photos`, `/api/free/photos/[id]` | GET, POST, PATCH | resident, administrator; never technician |
+| `/api/notifications` | GET, PATCH | any signed-in user, own notifications only |
+| `/api/health` | GET | public; reports only whether settings are present |
 
-### Data
+The exact rule for each action is in the pure module named in the route's
+comment.
 
-Database `dfrmms`: tables `users`, `fault_reports`, `status_log` (same fields
-as the Firestore collections; `photoURL` became `photoFileId`) and
-`auth_attempts`. Created by `npm run appwrite:setup` (repeatable, never deletes).
+## Setting up
 
-### Accounts
-
-The system's own accounts use addresses on the project's domain:
-
-| Role | Sign-in address |
-| --- | --- |
-| Administrator | `admin@dfrmms.space` |
-| Technician | `technician@dfrmms.space` |
-| Student | `student@dfrmms.space` |
-
-These accounts were moved from Firebase with their original user IDs, so
-their reports, assignments and history stayed attached. On 17 November 2026
-their addresses were changed in place from the earlier `@dfrfms.com` names
-(`scripts/rename-account-emails.mjs`); IDs, roles and passwords were not
-changed. The address is a sign-in name: password-reset emails only arrive if
-the domain is set up to receive mail.
-
-### Configuration
-
-Copy `.env.example` to `.env.local` and fill it in. `APPWRITE_API_KEY` is a
-secret: it has no `NEXT_PUBLIC_` prefix, is never sent to the browser, and must
-never be committed.
-
-### Commands
-
-| Command | Purpose |
-| --- | --- |
-| `npm run appwrite:check` | Report what is missing in Appwrite, change nothing |
-| `npm run appwrite:setup` | Create the database, tables, indexes and bucket |
-| `npm run appwrite:verify` | Check the structure, transactions and visitor access |
-| `npm run appwrite:test-users` | Create the test accounts (`-- --remove` deletes them) |
-| `npm run migrate:export` | Read the existing Firestore data (read-only) into `migration-data/` (ignored by git) |
-| `npm run migrate:dry` | Show what the migration would copy into Appwrite; change nothing |
-| `npm run migrate:run` | Copy the data into Appwrite and verify it by reading it back (repeatable) |
-| `npm run migrate:check` | With `npm run dev` running: check that migrated accounts sign in and see the right data |
-| `npm run key:set` | Save a new API key to `.env.local` with hidden input, after testing it |
-| `npm run accounts:rename-dry` / `-run` / `-rollback` | Rename the three account addresses in place (dry run, execute, undo) |
-| `npm run accounts:check` | Check that the three accounts sign in and each role sees and is refused the right things (set `TEST_BASE_URL` for a deployed site) |
-| `npm run names:sync-dry` / `names:sync-run` | List, or update, stored copies of people's names that differ from their sign-in account (the site already shows the account's name) |
-| `npm test` | Unit tests (domain, access, authentication and image rules) |
-| `npm run test:api` | HTTP-level authentication, workflow and security tests; needs `npm run dev` running and the test accounts |
-
-## Confidential Neighbour Notices (branch `feature/community-modules`)
-
-Not yet merged into `main` or deployed. Full description, requirements,
-database design, security analysis and test results: [docs/neighbour-notices.md](docs/neighbour-notices.md).
-
-- A resident sends a notice about a problem in a shared area (`/student/neighbour`).
-  Other residents never see who sent it; technicians have no access.
-- An administrator reviews each notice (`/admin/neighbour`), may publish it to the
-  residents of the same dormitory, respond, or remove it with a reason. Every action
-  is logged. Viewing the sender requires a reason and is logged as well.
-- In-app notifications (`/notifications`) tell the sender what happened to a notice
-  and tell administrators that a new one arrived.
-- Routes: `/api/neighbour`, `/api/neighbour/[id]`, `/api/neighbour/[id]/reveal`,
-  `/api/neighbour/[id]/actions`, `/api/notifications`.
-- Tables (created by `npm run appwrite:setup`): `neighbour_notices`,
-  `neighbour_moderation_actions`, `notifications`.
-- Tests: `tests/unit/neighbour.test.ts`, `tests/api/neighbour.test.ts`
-  (the API tests need `npm run appwrite:test-users`, which creates the test accounts).
-
-## Free Stuff and Community Sharing (branch `feature/community-modules`)
-
-Not yet merged into `main` or deployed. Full description, requirements,
-reservation life cycle, database design, security analysis and test results:
-[docs/free-stuff.md](docs/free-stuff.md).
-
-- A resident offers an item for free to the residents of the same dormitory
-  (`/student/free`), with up to three photos. No prices or payments.
-- Another resident reserves it for 24 hours (`FREE_RESERVATION_HOURS` on the server
-  changes this). Of several simultaneous attempts exactly one succeeds: a lock row
-  whose ID is the listing ID decides it.
-- The owner confirms the handover. Reservations that run out are released the next
-  time the item is read.
-- An administrator sees all items and reports (`/admin/free`) and can remove an item
-  with a reason. Technicians have no access.
-- Routes: `/api/free`, `/api/free/[id]`, `/api/free/photos`, `/api/free/photos/[id]`.
-- Tables: `free_listings`, `free_reservations`, `free_reservation_locks`,
-  `free_listing_reports`; bucket `free-item-photos`.
-- Tests: `tests/unit/sharing.test.ts`, `tests/api/sharing.test.ts`
-  (`npm run appwrite:test-users` now creates 8 accounts).
-
-## Security Rules (Firebase version)
-
-Access is enforced on the server by `firestore.rules` and `storage.rules`
-(least privilege); the checks in the pages are only for usability.
-
-| Data | Resident (student) | Technician | Administrator |
-| --- | --- | --- | --- |
-| User profiles | Own profile only | Own profile only | Read all; create, update, delete (not own) |
-| Fault reports: read | Own reports only | All | All |
-| Fault reports: create | For themselves; open, unassigned, valid content, priority matching the classification | No | No |
-| Fault reports: update | Own report while open, unassigned and not triaged; content fields only | Assigned reports only; status (technician workflow) and resolution note only | Status (admin workflow), assignment, priority; never the reporter or submission time |
-| Fault reports: delete | No | No | Yes |
-| History (`status_log`) | Read own reports' history; add "created"/"edited" entries for own reports | Read all; add "status"/"note" entries for assigned reports | Read all; add any entry |
-| Photos (Storage) | View; upload JPG/PNG/WebP up to 5 MB into own folder | View | View |
-
-History entries must carry the writer's real account ID and role and the server
-time, and can never be changed or deleted. Uploaded photos cannot be replaced or
-deleted. Accounts without a profile have no access.
-
-## Testing
-
-| Command | What it runs | Needs |
-| --- | --- | --- |
-| `npm test` | Unit tests of the domain rules (`tests/unit`) | Node.js |
-| `npm run test:rules` | Security rule tests for Firestore and Storage (`tests/rules`) on the local Firebase emulator | Node.js and Java 21+ |
-
-The rule tests start the emulators, run, and stop them again. They never touch
-the live Firebase project (they use the local-only project ID `demo-dfrmms`).
-
-### Running the whole app against the emulator
-
-For manual testing with made-up accounts instead of live data:
-
-```bash
-npm run emulators        # terminal 1: local Auth, Firestore and Storage
-npm run seed:emulator    # terminal 2: test accounts and sample reports
-npm run dev:emulator     # terminal 2: the app, connected to the emulators
-```
-
-The test accounts and their password are listed in `scripts/seed-emulator.mjs`.
-They exist only inside the local emulator.
-
-## Environment Variables
-
-Create a `.env.local` file in the project root with the Firebase client configuration.
-
-```bash
-NEXT_PUBLIC_FIREBASE_API_KEY=
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-NEXT_PUBLIC_FIREBASE_APP_ID=
-```
-
-Without these values, Firebase initialization will fail.
-
-## Getting Started
-
-### Install dependencies
+Requirements: Node 24 and an Appwrite project.
 
 ```bash
 npm install
 ```
 
-### Run the development server
+Copy `.env.example` to `.env.local` and fill in the values. `.env.local` is
+ignored by Git. Never commit a secret, never give the API key a
+`NEXT_PUBLIC_` name, and never paste it into code, a chat or a log.
+
+| Setting | Secret | Purpose |
+|---------|--------|---------|
+| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | no | Where the Appwrite project lives |
+| `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | no | Which project |
+| `APPWRITE_API_KEY` | **yes** | The server's key |
+| `FREE_RESERVATION_HOURS` | no | Optional. Length of a free-item reservation, 1 to 168 hours, default 24 |
+| `TEST_USER_PASSWORD` | **yes** | Only for the API tests: the shared password of the test accounts |
+
+Create the database structure, then start the application:
+
+```bash
+npm run appwrite:check
+```
+
+```bash
+npm run appwrite:setup
+```
 
 ```bash
 npm run dev
 ```
 
-Open the app at `http://localhost:3000`.
+`appwrite:check` lists what is missing and changes nothing. `appwrite:setup`
+creates only what is missing; it never deletes or changes existing data.
+Both print the project ID they act on. Look at it before you run setup.
 
-### Build for production
+## Commands
+
+| Command | What it does | Writes to Appwrite |
+|---------|--------------|:---:|
+| `npm run dev` | Development server | no |
+| `npm run build`, `npm start` | Production build and server | no |
+| `npm run lint` | ESLint | no |
+| `npx tsc --noEmit` | Type-check | no |
+| `npm test` | Unit tests | no |
+| `npm run test:api` | API tests against a running server | **yes**, test data |
+| `npm run appwrite:check` | Compare the project with the schema | no |
+| `npm run appwrite:setup` | Create missing tables, columns, indexes, buckets | **yes** |
+| `npm run appwrite:verify` | Check the structure; writes and removes two throwaway rows | **yes**, briefly |
+| `npm run appwrite:test-users` | Create or refresh the test accounts | **yes** |
+| `npm run key:set` | Save a new API key in `.env.local` with hidden input | no |
+| `npm run password:set -- <email>` | Set an account's password with hidden input | **yes** |
+| `npm run names:sync-dry`, `names:sync-run` | Align stored name copies with the accounts | run: **yes** |
+| `npm run accounts:check` | Sign-in check for the first accounts; reads a local file that is not in the repository | signs in |
+
+The same commands exist for a separate test project, reading
+`.env.test.local` instead of `.env.local`: `tp:check`, `tp:setup`,
+`tp:verify`, `tp:test-users` and `tp:test-api`.
+
+## Testing
+
+**Unit tests** (`tests/unit`) cover the pure rules. They need nothing but
+Node:
 
 ```bash
-npm run build
+npm test
 ```
 
-### Start the production server
+**API tests** (`tests/api`) call the running application over HTTP as
+different users and check both what works and what must be refused. They
+need a running server, the settings above and the test accounts:
 
 ```bash
-npm run start
+npm run appwrite:test-users
 ```
-
-### Run linting
 
 ```bash
-npm run lint
+npm run dev
 ```
 
-## Project Structure
-
-```text
-app/
-	layout.tsx          Global layout, font setup, auth provider wrapper
-	page.tsx            Root route
-	login/page.tsx      Email/password sign-in and role redirect
-	student/page.tsx    Student report submission and history
-	technician/page.tsx Technician dashboard and status management
-	admin/page.tsx      Admin dashboard and user management
-lib/
-	AuthContext.tsx     Global auth state and role lookup
-	firebase.ts         Firebase client initialization
-public/               Static assets
+```bash
+npm run test:api
 ```
 
-## UI Notes
+Set `TEST_BASE_URL` to test a deployed site instead of `localhost:3000`.
 
-The interface uses a dark theme with Tailwind utility classes. The layout is intentionally compact and dashboard-oriented rather than marketing-style. Fonts are loaded through `next/font` using Geist.
+The API tests create rows and files and remove them when they finish. They
+use only accounts named `dfrmms.test.*@example.com`. Prefer a separate test
+project. These tests are a local, manual step: they are not run by CI, and
+each run should be recorded with its date and counts.
 
-## Current Limitations
+**Continuous integration** (`.github/workflows/ci.yml`) runs on every push:
+lint, type-check, unit tests, build, dependency audit and a secret scan. It
+has no access to Appwrite.
 
-- Access control is enforced in the client route components, so Firebase security rules still need to be configured properly in the backend.
-- There is no dedicated server API layer in the current codebase.
-- Validation is minimal in the current UI and can be expanded further.
-- The app assumes user profile documents already exist in Firestore for login routing.
+## Deployment
 
-## Troubleshooting
+Vercel builds the `main` branch for production. The three Appwrite settings
+must be set in Vercel for the Production environment (and Preview, if
+previews are used). `vercel.json` asks for the functions to run in Frankfurt
+(`fra1`), next to Appwrite; check the region in the Vercel dashboard after a
+deployment, because a plan may not allow the choice.
 
-### Login redirects to the wrong dashboard
+After a deployment, open `/api/health`. It answers whether the settings are
+present and the backend is reachable, without revealing any value.
 
-Check the user’s Firestore document in `users` and confirm the `role` field is set correctly.
+## Security measures in the code
 
-### Photo upload fails
+| Measure | Where |
+|---------|-------|
+| Session cookie: httpOnly, SameSite=Strict, Secure in production | `lib/server/session.ts` |
+| Role from Appwrite labels; same-origin check on changing requests | `lib/server/session.ts`, `lib/server/http.ts` |
+| Sign-in lockout after repeated failures | `lib/auth-rules.ts`, `lib/server/throttle.ts` |
+| Validation of every request body | Zod schemas in the pure modules |
+| Uploads checked by content, size-limited, private, served through a route | `lib/image-rules.ts`, `app/api/photos`, `app/api/free/photos` |
+| Append-only history written with each report change | `lib/server/reports.ts` |
+| Content security policy and other security headers | `next.config.ts` |
+| Generic error messages; details only in the server log | `handle()` in `lib/server/http.ts` |
 
-Check the Firebase Storage configuration and make sure the app has valid upload permissions.
+Known gaps are listed, with the module that will close each, in
+[docs/requirements.md](docs/requirements.md).
 
-### The app loads but data does not appear
+## History
 
-Confirm the Firestore collection names match the code exactly:
+The system began as a coursework project on Firebase and was moved to
+Appwrite for the thesis. Three Git tags mark the stages:
 
-- `users`
-- `fault_reports`
-- `status_log`
-
-### Firebase initialization errors
-
-Verify every `NEXT_PUBLIC_FIREBASE_*` environment variable is set.
-
-## Notes For Contributors
-
-When adding new features, keep the role-based structure consistent:
-
-- Put shared auth logic in `lib/AuthContext.tsx`.
-- Put Firebase setup in `lib/firebase.ts`.
-- Keep role-specific UI inside the route that owns it.
-- Update this README whenever a new collection, route, or role flow is added.
-
-## Summary
-
-DFRMMS is a Firebase-backed dormitory maintenance system with three main experiences: students report issues, technicians resolve them, and admins coordinate the overall workflow. The current codebase focuses on a simple and direct client-side architecture backed by Firebase services.
+| Tag | State |
+|-----|-------|
+| `coursework-baseline` | The coursework project, before thesis work |
+| `firebase-final` | Last version that ran on Firebase |
+| `migration-scripts-final` | After the move to Appwrite, before the Firebase files and migration scripts were removed |
