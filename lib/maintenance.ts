@@ -1,6 +1,6 @@
 /**
  * Domain rules of the Dormitory Fault Reporting and Maintenance Management
- * System. Everything here is pure (no Firebase, no React) so it can be unit
+ * System. Everything here is pure (no Appwrite, no React) so it can be unit
  * tested and reused by the pages, and so the business rules live in one place.
  */
 import { z } from "zod";

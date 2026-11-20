@@ -11,22 +11,11 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run tests/unit",
-    "test:rules": "firebase emulators:exec --only firestore,storage --project demo-dfrmms \"vitest run tests/rules\"",
-    "emulators": "firebase emulators:start --only auth,firestore,storage --project demo-dfrmms",
-    "seed:emulator": "node scripts/seed-emulator.mjs",
-    "dev:emulator": "node scripts/dev-emulator.mjs",
     "appwrite:setup": "node --env-file=.env.local scripts/appwrite-setup.mjs",
     "appwrite:check": "node --env-file=.env.local scripts/appwrite-setup.mjs --check",
     "appwrite:verify": "node --env-file=.env.local scripts/appwrite-verify.mjs",
     "appwrite:test-users": "node --env-file=.env.local scripts/appwrite-test-users.mjs",
     "test:api": "node --env-file=.env.local node_modules/vitest/vitest.mjs run tests/api --testTimeout=60000 --no-file-parallelism --hookTimeout=120000",
-    "migrate:export": "node scripts/firestore-export.cjs",
-    "migrate:dry": "node --env-file=.env.local scripts/migrate-to-appwrite.mjs",
-    "migrate:run": "node --env-file=.env.local scripts/migrate-to-appwrite.mjs --run",
-    "migrate:check": "node scripts/migrate-check.mjs",
-    "accounts:rename-dry": "node --env-file=.env.local scripts/rename-account-emails.mjs",
-    "accounts:rename-run": "node --env-file=.env.local scripts/rename-account-emails.mjs --run",
-    "accounts:rename-rollback": "node --env-file=.env.local scripts/rename-account-emails.mjs --rollback",
     "key:set": "node scripts/set-api-key.mjs",
     "password:set": "node --env-file=.env.local scripts/set-password.mjs",
     "accounts:check": "node scripts/accounts-signin-check.mjs",
@@ -34,8 +23,6 @@
     "names:sync-run": "node --env-file=.env.local scripts/sync-stored-names.mjs --run"
   },
   "dependencies": {
-    "firebase": "^12.15.0",
-    "firebase-admin": "^14.0.0",
     "next": "16.4.6",
     "node-appwrite": "^31.2.0",
     "react": "19.2.4",
@@ -43,21 +30,17 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@firebase/rules-unit-testing": "^5.0.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
-    "firebase-tools": "^15.34.2",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.1.0"
   },
   "allowScripts": {
-    "@firebase/util@1.15.1": true,
-    "protobufjs@7.6.4": true,
     "sharp@0.34.5": true,
     "unrs-resolver@1.12.2": true
   }
