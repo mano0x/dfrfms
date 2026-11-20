@@ -2,7 +2,7 @@
 
 Plan for extending DFRMMS from fault reporting into a wider dormitory portal.
 Written 2026-11-21 from the build brief and the owner's answers. **Status:
-waiting for approval. No feature code is written before approval.**
+approved by the owner on 2026-11-21. A1 is done and waiting for review.**
 
 A new session without the earlier conversation starts here: read this file,
 then continue at the first unticked step. Rules that apply to every step are
@@ -52,7 +52,7 @@ in-app notifications; confidential neighbour notices; free-item sharing.
 | D2 | The application keeps the name DFRMMS and its current title. The thesis title is settled between the owner and the supervisor. |
 | D3 | A separate Appwrite test project is wanted. Fallback if the plan allows only one project: tests use the live project with test accounts only, and the owner is told before each run. |
 | D4 | Firebase files, packages and migration scripts are removed, but only after `npm run appwrite:verify`, the health check and one API test run succeed. `rename-account-emails.mjs` goes too. `sync-stored-names.mjs` stays. |
-| D5 | Local tag `appwrite-migration` marks `main` before the removal (created 2026-11-21 at `375141b`). |
+| D5 | Local tag `migration-scripts-final` marks `main` before the removal (at `375141b`). The older branch `appwrite-migration` is kept. |
 | D6 | A status `assigned` is added between `open` and `in-progress`. |
 | D7 | Community roles: `event-organiser` works (events published without review). `floor-representative` and `council-member` can be requested and approved but allow nothing extra yet. |
 | D8 | Identity documents: numbers only, no scans. |
@@ -67,6 +67,8 @@ in-app notifications; confidential neighbour notices; free-item sharing.
 | D17 | Test accounts may be added as needed through `npm run appwrite:test-users`. |
 | D18 | CI runs lint, type-check, unit tests, build, audit and secret scan. API tests stay a local, manual step; date and counts are recorded. |
 | D19 | The daily job runs once a day. |
+| D20 | `vercel.json` asks for region `fra1`. The owner is reminded at the next deployment to check the region in the Vercel dashboard. |
+| D21 | The account `thayyab200@gmail.com` (student, created by the owner on purpose) is left as it is and is never used in tests. It is to be listed in `docs/data-inventory.md`, when that file exists, as a tester account with a real address. |
 
 ## 4. Decisions still open
 
@@ -74,12 +76,10 @@ These need an answer before the step that depends on them. None blocks A1.
 
 | # | Question | Needed before |
 |---|----------|---------------|
-| O1 | The tag `appwrite-migration` has the same name as an existing branch (local and on GitHub, at `2611d95`). Git warns that the name is ambiguous. Rename the tag (for example `appwrite-migration-final`), delete the old branch, or leave both? | A1 |
 | O2 | Can the Appwrite plan hold a second project? (Owner tries; see "Test project" in the report of 2026-11-21.) | A1 API test run, if possible |
 | O3 | **Altering existing columns.** Three steps need a new value in an existing enum column: `applicant` in `users.role` (C5), `assigned` in `fault_reports.status` (B3), and new entries in `status_log.type`. The rule "the setup script only adds; never alter columns" forbids this as written. Proposal: allow the setup script one narrow extra action, "add elements to an enum column, never remove", shown in `appwrite:check` before it runs. | B1 (first new history type) |
 | O4 | **A2 migration.** Replacing the free-text `dormitory` and `roomNumber` with IDs changes existing rows (3 real profiles, 6 real reports). Proposal: add `dormitoryId` and `roomId` columns next to the old ones, fill them by a dry-run and run script that writes a backup file first, switch the code to the IDs, and leave the old text columns in place and unused. Nothing is dropped. | A2 |
 | O5 | Existing reports that are `open` with a technician assigned: do they become `assigned` in the same migration? Proposal: yes, by the same backed-up script. | B3 |
-| O6 | Vercel region file `vercel.json` with `fra1`: add it? (Brief: ask first.) | A1 |
 | O7 | A nonce-based content security policy makes every page render on the server per request (no static pages). Accept that cost if it works, or keep the current policy? Decided after a trial in B8. | B8 |
 | O8 | Which secrets the owner will create and where (see section 7). They must be set in `.env.local`, the test env file and Vercel by the owner; I never see the values. | A3 |
 | O9 | Optional extras (announcements, planned maintenance, room condition check): build any of them? Suggested place: after Phase B for the first two, after C6 for the third. | end of Phase B |
@@ -114,15 +114,15 @@ Ideas from the owner are marked "idea 1" to "idea 12".
 
 **A1. Clean-up and guard rails** (SEC-15)
 
-- [ ] Confirm Appwrite works: `npm run appwrite:verify`, health check, one `npm run test:api` run (owner is told first). Stop if anything fails.
-- [ ] Remove Firebase: `lib/firebase.ts`, `app/student/page-backup.tsx`, `firestore.rules`, `storage.rules`, `firebase.json`, `.firebaserc`, `firestore.indexes.json`, `tests/rules`, `scripts/dev-emulator.mjs`, `scripts/seed-emulator.mjs`, `scripts/firestore-export.cjs`, `scripts/migrate-to-appwrite.mjs`, `scripts/migrate-check.mjs`, `scripts/rename-account-emails.mjs`, their npm scripts, and the packages `firebase`, `firebase-admin`, `firebase-tools`, `@firebase/rules-unit-testing`.
-- [ ] Re-run lint, type-check, unit tests, build, audit; record the new audit count.
-- [ ] Add `FREE_RESERVATION_HOURS` to `.env.example` (in use today, missing there).
-- [ ] Rewrite `README.md` as a developer guide; remove the table of sign-in addresses.
-- [ ] GitHub Actions: lint, type-check, unit tests, build, `npm audit`, secret scan, on every push.
-- [ ] Propose `vercel.json` (`fra1`); add only on a yes (O6).
-- [ ] Test project: second env file, `test:api` reads it (D3).
-- [ ] Module report, plan ticked, AI-use log.
+- [x] Confirm Appwrite works: `npm run appwrite:verify`, health check, API tests. Done 2026-11-21; see the progress log for both test runs.
+- [x] Remove Firebase: `lib/firebase.ts`, `app/student/page-backup.tsx`, `firestore.rules`, `storage.rules`, `firebase.json`, `.firebaserc`, `firestore.indexes.json`, `tests/rules`, `scripts/dev-emulator.mjs`, `scripts/seed-emulator.mjs`, `scripts/firestore-export.cjs`, `scripts/migrate-to-appwrite.mjs`, `scripts/migrate-check.mjs`, `scripts/rename-account-emails.mjs`, their npm scripts, and the packages `firebase`, `firebase-admin`, `firebase-tools`, `@firebase/rules-unit-testing`.
+- [x] Re-run lint, type-check, unit tests, build, audit. Lint: 0 errors, 5 warnings. Audit: 39 advisories before, 14 after the removal, 0 after `npm audit fix` (locked versions only).
+- [x] Add `FREE_RESERVATION_HOURS` and `TEST_USER_PASSWORD` to `.env.example`.
+- [x] Rewrite `README.md` as a developer guide; remove the table of sign-in addresses.
+- [x] GitHub Actions: lint, type-check, unit tests, build, `npm audit`, secret scan, on every push. **Not yet run**: the workflow first runs when the branch is pushed.
+- [x] `vercel.json` with `fra1` (D20).
+- [ ] Test project: the `tp:*` commands exist; creating the project and `.env.test.local` is the owner's step (D3, O2).
+- [x] Module report, plan ticked, AI-use log.
 
 **A2. Reference data: dormitories, rooms, allocations** (FR-24)
 
@@ -224,7 +224,7 @@ Ideas from the owner are marked "idea 1" to "idea 12".
 ### Phase F. Cross-cutting
 
 **F1. Privacy toolkit** (FR-32, FR-33, FR-34, SEC-17)
-- [ ] `docs/data-inventory.md` (started in A2 and kept up to date by every module), privacy notice, "My data" export, retention module with `SAMPLE` periods and a dry run, anonymisation.
+- [ ] `docs/data-inventory.md`, including the tester account of D21 (started in A2 and kept up to date by every module), privacy notice, "My data" export, retention module with `SAMPLE` periods and a dry run, anonymisation.
 
 **F2. Second factor for staff** (FR-06, SEC-18)
 - [ ] Trial with Appwrite multi-factor and the cookie session; build or report what blocks it.
@@ -295,4 +295,10 @@ Nothing else is planned. Charts are inline SVG; PDF is the browser's print.
 | Date | Step | Result |
 |------|------|--------|
 | 2026-11-20 | Baseline | see section 1 |
-| 2026-11-21 | Plan written; tag `appwrite-migration` created at `375141b` | waiting for approval |
+| 2026-11-21 | Plan written and approved | tag `migration-scripts-final` at `375141b` |
+| 2026-11-21 | A1 check: `npm run appwrite:verify` on project `6afa1cbf000cec97cead` | 21 of 21 |
+| 2026-11-21 | A1 check: health check on `www.dfrmms.space` | healthy |
+| 2026-11-21 | A1 check: `npm run test:api`, first run (local production build, same project) | **123 of 134.** 11 failures, all in `tests/api/auth.test.ts`, all `fetch failed` / `ECONNRESET`: the local server dropped a connection. The other three files passed. Why the local server stopped was not found; its log shows no error. |
+| 2026-11-21 | A1 check: second run, `tests/api/auth.test.ts` only, after a server restart | 19 of 19; the server was still answering afterwards |
+| 2026-11-21 | A1 after the removal: lint, type-check, `npm test`, build | 0 lint errors; type-check passes; 134 of 134; build succeeds, also with no Appwrite settings present |
+| 2026-11-21 | A1 | done; the API suite has not been run since the removal (see the A1 report) |
