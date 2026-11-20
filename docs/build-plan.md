@@ -2,7 +2,7 @@
 
 Plan for extending DFRMMS from fault reporting into a wider dormitory portal.
 Written 2026-11-21 from the build brief and the owner's answers. **Status:
-approved by the owner on 2026-11-21. A1 is done and waiting for review.**
+approved by the owner on 2026-11-21. A1 is done and approved. A2 is next and waits for the owner's answers on its design.**
 
 A new session without the earlier conversation starts here: read this file,
 then continue at the first unticked step. Rules that apply to every step are
@@ -119,7 +119,7 @@ Ideas from the owner are marked "idea 1" to "idea 12".
 - [x] Re-run lint, type-check, unit tests, build, audit. Lint: 0 errors, 5 warnings. Audit: 39 advisories before, 14 after the removal, 0 after `npm audit fix` (locked versions only).
 - [x] Add `FREE_RESERVATION_HOURS` and `TEST_USER_PASSWORD` to `.env.example`.
 - [x] Rewrite `README.md` as a developer guide; remove the table of sign-in addresses.
-- [x] GitHub Actions: lint, type-check, unit tests, build, `npm audit`, secret scan, on every push. **Not yet run**: the workflow first runs when the branch is pushed.
+- [x] GitHub Actions: lint, type-check, unit tests, build, `npm audit`, secret scan, on every push. First run 2026-11-21 on commit `bf830e4`: both jobs succeeded.
 - [x] `vercel.json` with `fra1` (D20).
 - [ ] Test project: the `tp:*` commands exist; creating the project and `.env.test.local` is the owner's step (D3, O2).
 - [x] Module report, plan ticked, AI-use log.
@@ -302,3 +302,4 @@ Nothing else is planned. Charts are inline SVG; PDF is the browser's print.
 | 2026-11-21 | A1 check: second run, `tests/api/auth.test.ts` only, after a server restart | 19 of 19; the server was still answering afterwards |
 | 2026-11-21 | A1 after the removal: lint, type-check, `npm test`, build | 0 lint errors; type-check passes; 134 of 134; build succeeds, also with no Appwrite settings present |
 | 2026-11-21 | A1 | done; the API suite has not been run since the removal (see the A1 report) |
+| 2026-11-21 | A1 approved by the owner; branch pushed to GitHub as a backup | first CI run on `bf830e4`: checks job and secret scan both succeeded |

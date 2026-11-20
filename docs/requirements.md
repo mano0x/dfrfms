@@ -94,7 +94,7 @@ requirements. Until then only the prefix exists.
 | SEC-12 | A notice never reveals its sender; a lookup needs a reason and is logged | Built | A3 adds it to the event log | |
 | SEC-13 | Abuse limits on every create route | Partly | A3, B4 | Notices and listings have limits that are read before the write; reports, photos and account creation have none. |
 | SEC-14 | Generic error messages; no internal detail leaves the server | Built | | |
-| SEC-15 | Secrets only in server settings; dependency audit and secret scan in CI | Partly | A1 | Secrets are server-only; there is no CI. |
+| SEC-15 | Secrets only in server settings; dependency audit and secret scan in CI | Built | A1 | CI first ran on 2026-11-21; both jobs succeeded. The audit step fails on high or critical advisories only. |
 | SEC-16 | A deactivated account cannot sign in and loses its sessions; starting passwords must be changed | Partly | B7 | A disabled account is refused; there is no way to deactivate one in the application, sessions are not revoked, and no forced change exists. |
 | SEC-17 | Minimal personal data in responses; privacy notice; retention and erasure; processing in the EU | Partly | F1 | Responses are minimal and Appwrite runs in Frankfurt; the rest does not exist. Vercel's function region is not pinned (A1). |
 | SEC-18 | Second factor for staff | To build | F2 | |
@@ -108,7 +108,7 @@ requirements. Until then only the prefix exists.
 | NFR-03 | Key flows work by keyboard and meet WCAG 2.2 level AA for contrast and labels | Not verified | F4 | |
 | NFR-04 | Current Chrome, Firefox, Safari and Edge; usable at 360 px wide | Not verified | each module | Checked so far only in a Chromium browser, at 375 px. |
 | NFR-05 | A change and its history are atomic; of simultaneous reservations exactly one succeeds | Built | | |
-| NFR-06 | Rules in pure modules with unit tests; lint, type-check and tests pass in CI | Partly | A1 | No CI; lint fails on one unused file. |
+| NFR-06 | Rules in pure modules with unit tests; lint, type-check and tests pass in CI | Built | A1 | CI runs lint, type-check, unit tests and build on every push. The API tests are not part of CI. |
 | NFR-07 | Lists are paged and filtered on the server | To build | A3 | |
 | NFR-08 | Data can be exported and restored with a documented script | To build | **no module in the brief** | See open decision O12 in the build plan. |
 | NFR-09 | Interface in English, Lithuanian as an option | Partly | A3, F3 | English only; text is inside the pages. |
