@@ -1,0 +1,298 @@
+# DFRMMS build plan
+
+Plan for extending DFRMMS from fault reporting into a wider dormitory portal.
+Written 2026-11-21 from the build brief and the owner's answers. **Status:
+waiting for approval. No feature code is written before approval.**
+
+A new session without the earlier conversation starts here: read this file,
+then continue at the first unticked step. Rules that apply to every step are
+in section 2.
+
+## 1. Where things stand
+
+Baseline on branch `feature/dormitory-portal` (created from `main` at
+`375141b`), measured 2026-11-20:
+
+| Check | Result |
+|-------|--------|
+| `npm run lint` | fails: 4 errors, all in `app/student/page-backup.tsx` (removed in A1) |
+| `npx tsc --noEmit` | passes |
+| `npm test` | 134 of 134 |
+| `npm run build` | succeeds |
+| `npm run test:api` | not run for the baseline; last run 2026-11-20 against the live site: 134 of 134 |
+| `npm audit` | 39 advisories (27 moderate, 12 high); 20 without dev tools |
+
+Built on `main`: fault reports with workflow, triage, targets and history;
+in-app notifications; confidential neighbour notices; free-item sharing.
+
+## 2. Working rules (short form of the brief)
+
+- One module at a time, in the order below. Inside a module: pure rules and
+  unit tests, schema, server operations, routes, API tests, pages, document.
+- After each module: attacker's review of my own change, stop report, tick
+  this plan, entry in `docs/ai-use-log.md`, then wait.
+- Branch `feature/dormitory-portal`. Small commits. No push, merge or deploy
+  without the owner's word; after a module is approved the branch is pushed
+  as a backup. Never push or merge to `main` without the owner's word.
+- Before any command that writes to Appwrite: show the project ID and ask.
+  Schema only through `scripts/appwrite-setup.mjs`: show
+  `npm run appwrite:check`, wait, then `npm run appwrite:setup`.
+- Nothing is deleted or altered in Appwrite except test data the tests made.
+- No secret is printed, logged or committed. `migration-data/` is not opened.
+- Sample content (rules, templates, prices, limits, retention periods) is
+  marked `SAMPLE`. No invented phone numbers, addresses or legal wording.
+- Test titles start with the requirement ID.
+- If something is unclear: ask, do not guess.
+
+## 3. Decisions taken (owner, 2026-11-21)
+
+| # | Decision |
+|---|----------|
+| D1 | Build the whole brief, Phase A to F, in order, with no date limit. |
+| D2 | The application keeps the name DFRMMS and its current title. The thesis title is settled between the owner and the supervisor. |
+| D3 | A separate Appwrite test project is wanted. Fallback if the plan allows only one project: tests use the live project with test accounts only, and the owner is told before each run. |
+| D4 | Firebase files, packages and migration scripts are removed, but only after `npm run appwrite:verify`, the health check and one API test run succeed. `rename-account-emails.mjs` goes too. `sync-stored-names.mjs` stays. |
+| D5 | Local tag `appwrite-migration` marks `main` before the removal (created 2026-11-21 at `375141b`). |
+| D6 | A status `assigned` is added between `open` and `in-progress`. |
+| D7 | Community roles: `event-organiser` works (events published without review). `floor-representative` and `council-member` can be requested and approved but allow nothing extra yet. |
+| D8 | Identity documents: numbers only, no scans. |
+| D9 | Residence confirmation: a `SAMPLE` template with an editable line for the signer's name and position. |
+| D10 | Rent per room type with an optional override per resident. Euro. Due day is a setting per dormitory, `SAMPLE` default 10. Deposit is a charge type. |
+| D11 | Guest policy is a setting per dormitory. `SAMPLE` defaults: 2 guests at once, 08:00 to 22:00, overnight needs approval, at most 2 nights. |
+| D12 | Map with a pin and one content-security-policy exception for the tile host, plus the link. |
+| D13 | No mail provider. In-app notifications only, plus Appwrite's own e-mails. E-mail must be addable later. |
+| D14 | English now. All new interface text in a messages module. |
+| D15 | Retention defaults are proposed and marked `SAMPLE`. |
+| D16 | Only made-up data for now; build as if real data could come later. |
+| D17 | Test accounts may be added as needed through `npm run appwrite:test-users`. |
+| D18 | CI runs lint, type-check, unit tests, build, audit and secret scan. API tests stay a local, manual step; date and counts are recorded. |
+| D19 | The daily job runs once a day. |
+
+## 4. Decisions still open
+
+These need an answer before the step that depends on them. None blocks A1.
+
+| # | Question | Needed before |
+|---|----------|---------------|
+| O1 | The tag `appwrite-migration` has the same name as an existing branch (local and on GitHub, at `2611d95`). Git warns that the name is ambiguous. Rename the tag (for example `appwrite-migration-final`), delete the old branch, or leave both? | A1 |
+| O2 | Can the Appwrite plan hold a second project? (Owner tries; see "Test project" in the report of 2026-11-21.) | A1 API test run, if possible |
+| O3 | **Altering existing columns.** Three steps need a new value in an existing enum column: `applicant` in `users.role` (C5), `assigned` in `fault_reports.status` (B3), and new entries in `status_log.type`. The rule "the setup script only adds; never alter columns" forbids this as written. Proposal: allow the setup script one narrow extra action, "add elements to an enum column, never remove", shown in `appwrite:check` before it runs. | B1 (first new history type) |
+| O4 | **A2 migration.** Replacing the free-text `dormitory` and `roomNumber` with IDs changes existing rows (3 real profiles, 6 real reports). Proposal: add `dormitoryId` and `roomId` columns next to the old ones, fill them by a dry-run and run script that writes a backup file first, switch the code to the IDs, and leave the old text columns in place and unused. Nothing is dropped. | A2 |
+| O5 | Existing reports that are `open` with a technician assigned: do they become `assigned` in the same migration? Proposal: yes, by the same backed-up script. | B3 |
+| O6 | Vercel region file `vercel.json` with `fra1`: add it? (Brief: ask first.) | A1 |
+| O7 | A nonce-based content security policy makes every page render on the server per request (no static pages). Accept that cost if it works, or keep the current policy? Decided after a trial in B8. | B8 |
+| O8 | Which secrets the owner will create and where (see section 7). They must be set in `.env.local`, the test env file and Vercel by the owner; I never see the values. | A3 |
+| O9 | Optional extras (announcements, planned maintenance, room condition check): build any of them? Suggested place: after Phase B for the first two, after C6 for the third. | end of Phase B |
+| O10 | Abilities of floor representative and council member. | whenever decided |
+| O12 | NFR-08 (export and restore with a documented script) has no module in the brief. Proposal: a read-only `backup:export` script and a `backup:restore` script that only writes into an empty project, built in F5 and tried on the test project. | F5 |
+| O13 | The older bucket `dormitory-fault-photos` still has a create permission for the `student` label, left from before the server-only design (SEC-05). The application does not use it. Removing it alters a bucket, so it needs a yes. | B4 |
+| O11 | Real wording: dormitory rules, agreement template, residence confirmation, helpline numbers, guest policy, rent, retention periods. | before real use |
+
+## 5. Risks I want on record
+
+- **Size.** This is a large system for one person to explain at a defence.
+  Every module document ends with "How it works in ten lines" and "Questions
+  a reviewer may ask" for that reason; the owner should read each module's
+  code before approving it.
+- **Title.** Phases C to E are dormitory administration, not maintenance.
+  The thesis title is the owner's to settle (D2).
+- **Sensitive data.** Identity documents, emergency contacts and guests are
+  built for made-up data (D16). Real use would need a legal basis, a privacy
+  notice with real wording and the dormitory's agreement.
+- **One live project.** Until a test project exists, tests write to the live
+  project.
+- **Unverified platform behaviour**, each checked by a small experiment
+  before it is relied on: atomic `incrementRowColumn` (A3), multi-factor
+  sign-in with a cookie session (F2), Vercel cron protection (A3), a nonce
+  policy with this Next.js version (B8).
+
+## 6. Phases, modules and steps
+
+Ideas from the owner are marked "idea 1" to "idea 12".
+
+### Phase A. Groundwork
+
+**A1. Clean-up and guard rails** (SEC-15)
+
+- [ ] Confirm Appwrite works: `npm run appwrite:verify`, health check, one `npm run test:api` run (owner is told first). Stop if anything fails.
+- [ ] Remove Firebase: `lib/firebase.ts`, `app/student/page-backup.tsx`, `firestore.rules`, `storage.rules`, `firebase.json`, `.firebaserc`, `firestore.indexes.json`, `tests/rules`, `scripts/dev-emulator.mjs`, `scripts/seed-emulator.mjs`, `scripts/firestore-export.cjs`, `scripts/migrate-to-appwrite.mjs`, `scripts/migrate-check.mjs`, `scripts/rename-account-emails.mjs`, their npm scripts, and the packages `firebase`, `firebase-admin`, `firebase-tools`, `@firebase/rules-unit-testing`.
+- [ ] Re-run lint, type-check, unit tests, build, audit; record the new audit count.
+- [ ] Add `FREE_RESERVATION_HOURS` to `.env.example` (in use today, missing there).
+- [ ] Rewrite `README.md` as a developer guide; remove the table of sign-in addresses.
+- [ ] GitHub Actions: lint, type-check, unit tests, build, `npm audit`, secret scan, on every push.
+- [ ] Propose `vercel.json` (`fra1`); add only on a yes (O6).
+- [ ] Test project: second env file, `test:api` reads it (D3).
+- [ ] Module report, plan ticked, AI-use log.
+
+**A2. Reference data: dormitories, rooms, allocations** (FR-24)
+
+- [ ] Pure rules `lib/accommodation.ts`: schemas, capacity rule, allocation states; unit tests.
+- [ ] Tables `dormitories`, `rooms`, `allocations`, `room_locks` (lock rows for capacity).
+- [ ] Server operations and admin routes; allocation under the lock-row pattern.
+- [ ] Migration scripts `reference:dry` and `reference:run` (O4), with a backup file.
+- [ ] Switch users, reports, notices and listings to IDs; names resolved at read time.
+- [ ] API tests: capacity under simultaneous allocation; dormitory isolation after migration.
+- [ ] Admin pages; `docs/accommodation.md`.
+
+**A3. Shared server utilities** (FR-29, SEC-11, SEC-13, FR-17, NFR-07)
+
+- [ ] Security event log: table `security_events`, one writer, admin viewer, no update or delete route; hashed network address.
+- [ ] Rate limiter: experiment with `incrementRowColumn` under simultaneous calls; otherwise deterministic row IDs. Replace the two read-then-write limits (notices, listings).
+- [ ] `lib/server/crypto.ts`: AES-256-GCM, fresh IV, versioned format, key rotation; unit tests.
+- [ ] Daily job route protected by the cron secret, per the current Vercel documentation; every job idempotent.
+- [ ] Paging helper (25 rows, cursor, server-side filters); retrofit report lists.
+- [ ] Messages module `lib/messages/en.ts`.
+- [ ] `docs/platform.md`.
+
+**A4. Navigation**
+
+- [ ] Grouped navigation inside the existing design; technicians get notifications.
+- [ ] Check at 360 px and by keyboard.
+
+### Phase B. Maintenance core
+
+**B1. Fault notifications** (FR-26)
+- [ ] Rules for who is told about what; `notify()` inside the existing transactions; tests.
+
+**B2. Confirmation and rating** (FR-11)
+- [ ] Confirm, "not fixed" with reason, rating 1 to 5, auto-close after 7 days decided on read.
+
+**B3. Visit verification with a one-time code** (FR-V, idea 2)
+- [ ] Status `assigned` (D6, O3, O5) and its transitions.
+- [ ] Code rules as pure functions: 6 digits, 10 minutes, single use, 5 attempts, 3 codes per hour, HMAC-SHA-256, constant-time compare.
+- [ ] Entry in absence, "no access", emergency entry with reason; shared areas need no code.
+- [ ] Tests listed in the brief.
+
+**B4. Abuse limits and photo hardening** (FR-12, SEC-08, SEC-13)
+- [ ] Limits through the shared limiter; `sharp` declared and pinned; re-encode in both buckets; daily job removes unattached uploads.
+
+**B5. Location of a fault** (FR-08)
+- [ ] Own room or a shared area of the resident's dormitory.
+
+**B6. Management reporting** (FR-22, FR-23, FR-28)
+- [ ] Timestamps `assignedAt`, `startedAt`, `resolvedAt`, `closedAt`; aggregates on the server; inline SVG charts; CSV export; daily overdue check.
+
+**B7. Account lifecycle and sign-in hardening** (FR-04, FR-05, SEC-02, SEC-16)
+- [ ] Edit, deactivate, reactivate, trigger reset; own password change; forced change of a starting password.
+- [ ] New lockout: per e-mail and network address pair, per network address, high ceiling per e-mail; trade-offs documented.
+
+**B8. Browser hardening** (SEC-09)
+- [ ] `proxy.ts` early redirect (optimistic only); nonce policy trial (O7).
+
+**B9. If time allows** (FR-16, FR-21, FR-27)
+- [ ] Completion photo; suggested technician; e-mail only with a provider (D13).
+
+### Phase C. Residents and accommodation
+
+**C1. Profile and community roles** (FR-P, idea 10)
+- [ ] Profile page; community role requests and approval (D7); protected fields never settable from a request.
+
+**C2. Citizenship and identity documents** (FR-I, idea 5)
+- [ ] Encrypted numbers, masked display, reveal with a reason, owner sees the access log, expiry reminders (D8).
+
+**C3. Emergency information and helplines** (FR-E, idea 6)
+- [ ] Home address, up to three contacts, emergency access with a reason; helplines page seeded with 112 only.
+
+**C4. Dormitory rules** (FR-R, idea 4)
+- [ ] Versioned sections, acknowledgement per version, safe rendering, `SAMPLE` seed.
+
+**C5. Applications for a place** (FR-A, idea 11)
+- [ ] Role `applicant` (O3); public registration with limits, e-mail verification and a trap field; draft, submit, withdraw; approve with allocation, waiting list, reject. The agreement step is a hook completed in C6.
+
+**C6. Agreements and residence declaration** (FR-G, idea 1)
+- [ ] Versioned templates, snapshot with SHA-256, acceptance by typed name, print page; residence confirmation (D9).
+
+### Phase D. Charges
+
+**D1. Rent and reminders** (FR-C, idea 3)
+- [ ] `charges`, append-only `charge_events`, idempotent monthly creation, reminder dates as a pure function (D10).
+
+**D2. Fines and appeals** (FR-C, idea 12)
+- [ ] Fine linked to a rule section (C4), one appeal within 14 days, uphold, reduce or cancel.
+
+### Phase E. Community and campus
+
+**E1. Guests** (FR-GU, idea 7)
+- [ ] Registration, policy per dormitory (D11), check-in and check-out, removal after 30 days.
+
+**E2. Events** (FR-EV, idea 8)
+- [ ] Proposal and review; organisers publish at once (D7); atomic capacity; reminders.
+
+**E3. Dormitory location** (FR-LO, idea 9)
+- [ ] Coordinates, Leaflet from npm, one tile host in the policy, link (D12).
+
+### Phase F. Cross-cutting
+
+**F1. Privacy toolkit** (FR-32, FR-33, FR-34, SEC-17)
+- [ ] `docs/data-inventory.md` (started in A2 and kept up to date by every module), privacy notice, "My data" export, retention module with `SAMPLE` periods and a dry run, anonymisation.
+
+**F2. Second factor for staff** (FR-06, SEC-18)
+- [ ] Trial with Appwrite multi-factor and the cookie session; build or report what blocks it.
+
+**F3. Lithuanian interface** (NFR-09)
+- [ ] Second messages module and a language switch.
+
+**F4. Accessibility** (NFR-03)
+- [ ] Automated scan and fixes on every new page.
+
+**F5. Documents and traceability**
+- [ ] `docs/threat-model.md`, traceability script, user guide per role, developer guide.
+
+## 7. Data model changes (summary)
+
+New tables by module. Every table: row security on, no permissions.
+
+| Module | Tables | Changes to existing tables |
+|--------|--------|----------------------------|
+| A2 | `dormitories`, `rooms`, `allocations`, `room_locks` | `dormitoryId`, `roomId` added to `users`, `fault_reports`, `neighbour_notices`, `free_listings` (O4) |
+| A3 | `security_events`, `rate_limits` | none |
+| B2 | none | `rating`, `ratingComment`, `resolvedAt` use on `fault_reports` |
+| B3 | `visit_codes` | `entryAllowed` on `fault_reports`; `assigned` status (O3) |
+| B5 | none | `locationType`, `area` on `fault_reports` |
+| B6 | none | `assignedAt`, `startedAt`, `resolvedAt`, `closedAt` on `fault_reports` |
+| B7 | `auth_attempts` reused with new row keys | `mustChangePassword` on `users` |
+| C1 | `community_role_requests` | profile columns on `users` |
+| C2 | `identity_documents` | `citizenship` on `users` |
+| C3 | `emergency_contacts`, `helplines` | home address columns on `users` |
+| C4 | `rule_versions`, `rule_sections`, `rule_acknowledgements` | none |
+| C5 | `applications` | `applicant` in `users.role` (O3) |
+| C6 | `agreement_templates`, `agreements`, `residence_confirmations` | none |
+| D1, D2 | `charges`, `charge_events`, `fine_appeals` | rent on `rooms`, override on `allocations`, due day on `dormitories` |
+| E1 | `guest_visits` | guest policy columns on `dormitories` |
+| E2 | `events`, `event_attendance`, `event_locks`, `event_moderation_actions` | none |
+| E3 | none | coordinates already on `dormitories` (A2) |
+| F1 | `privacy_acceptances`, `retention_log` | none |
+
+Exact columns are fixed in each module's first step and shown in
+`npm run appwrite:check` before anything is created.
+
+## 8. New settings
+
+Names only. Values are created and stored by the owner; they go into
+`.env.local`, the test env file and Vercel, and into `.env.example` with a
+comment and no value. The health check reports presence only.
+
+| Setting | Module | Purpose |
+|---------|--------|---------|
+| `DATA_ENCRYPTION_KEY` | A3 | field encryption (C2, C3) |
+| `SECURITY_HASH_KEY` | A3 | keyed hash of network addresses in the event log and limiter |
+| `CRON_SECRET` | A3 | protects the daily job |
+| `VISIT_CODE_SECRET` | B3 | keyed hash of visit codes |
+| `MAP_TILE_URL` | E3 | tile address, so the provider can be changed |
+| `FREE_RESERVATION_HOURS` | exists | reservation length; to be listed in `.env.example` (A1) |
+
+## 9. New dependencies (each needs a yes when its module starts)
+
+| Package | Module | Why |
+|---------|--------|-----|
+| `sharp` (already installed through Next.js; to be declared and pinned) | B4 | re-encode uploads on the server |
+| `leaflet` | E3 | map with a pin |
+
+Nothing else is planned. Charts are inline SVG; PDF is the browser's print.
+
+## 10. Progress log
+
+| Date | Step | Result |
+|------|------|--------|
+| 2026-11-20 | Baseline | see section 1 |
+| 2026-11-21 | Plan written; tag `appwrite-migration` created at `375141b` | waiting for approval |
